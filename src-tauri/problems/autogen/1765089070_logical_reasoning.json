@@ -1,0 +1,7 @@
+{
+  "id": "autogen_123",
+  "topic": "logical_reasoning",
+  "difficulty": 0.57000005,
+  "statement": "Imagine you are in a group of people standing in a circle waiting to be executed. The counting begins at person #1 and continues around the circle by elimination until only one person remains. Given a number 'n', write an algorithm that will determine which person is going to be last remaining, if we start from person #1.",
+  "solution_sketch": "This problem can be solved using recursion or mathematical formulas. One way of doing this could be to consider the position after elimination and apply the same logic again for the new group until there's only one left."
+}

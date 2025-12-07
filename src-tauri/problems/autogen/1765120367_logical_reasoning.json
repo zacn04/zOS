@@ -1,0 +1,7 @@
+{
+  "id": "autogen_12345",
+  "topic": "logical_reasoning",
+  "difficulty": 0.59000003,
+  "statement": "There are three friends named Alice, Bob, and Charlie. They decided to play a game of hide-and-seek. Alice was the first one who found the treasure. Now, it's Bob's turn to find the treasure. If it takes him exactly twice as long as it took for Alice to find the treasure, how much time will it take for Bob to find the treasure?",
+  "solution_sketch": "Bob would have taken twice as long as Alice did because he found the treasure after Alice in half of the total time."
+}

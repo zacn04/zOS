@@ -1,0 +1,7 @@
+{
+  "id": "autogen_4890321",
+  "topic": "logical_reasoning",
+  "difficulty": 0.6200001,
+  "statement": "Given a set of integers S, determine if there exists a subset whose sum is exactly divisible by a given integer k. The function should return true if such a subset exists and false otherwise. Assume the input list can contain both positive and negative numbers, and the length of the list does not exceed 10^5. For example, for the set S = [3, -2, 5, 7] and k = 4, the function should return true because the subset [3, -2, 5] has a sum (6) that is divisible by 4.",
+  "solution_sketch": "Use dynamic programming to keep track of possible sums modulo k. Iterate through each number in S and update the state accordingly."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "autogen_1",
+  "topic": "logical_reasoning",
+  "difficulty": 0.57000005,
+  "statement": "Two people are crossing a river by foot and a speed of 3 miles per hour for the first person and 2 miles per hour for the second one. They both start at the same time but move in opposite directions. If they meet at some point after passing each other for the third time, find out when did they meet.",
+  "solution_sketch": "This problem is a simple logical reasoning question. The first person crosses the river in (3 * 3) = 9 miles and the second one in (2 * 3) = 6 miles by itself. They both start at same point so, after passing each other for third time, they meet at some distance which would be equal to sum of their own distances crossed modulo their combined speed (which is 5 miles)."
+}
