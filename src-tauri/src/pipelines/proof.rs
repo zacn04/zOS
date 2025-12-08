@@ -135,55 +135,20 @@ pub async fn call_deepseek_step2(
 
 pub fn build_step1_prompt(user_proof: &str) -> String {
     format!(
-        r#"Analyze the following solution attempt. This could be:
-- A mathematical proof or derivation (including pure math, analysis, algebra, topology, etc.)
-- A proof strategy or logical reasoning argument
-- An RL/ML theory explanation
-- A code debugging explanation
-- An algorithm correctness argument
-- A logical reasoning chain
-- Any technical solution attempt
-
-IMPORTANT: You MUST analyze this solution attempt regardless of its domain. Do NOT refuse analysis for mathematical proofs, logical reasoning, or proof strategy problems.
-
-Extract its structure and critique it.
-Return ONLY valid JSON in the following schema:
+        r#"Analyze this solution attempt and return ONLY valid JSON:
 
 {{
-  "steps": [
-    {{
-      "id": "s1",
-      "text": "the user's first meaningful statement or step",
-      "role": "assumption | deduction | claim | definition | conclusion | code_statement | explanation"
-    }}
-  ],
-  "issues": [
-    {{
-      "step_id": "s1",
-      "type": "missing_justification | faulty_logic | misuse_of_theorem | undefined_term | code_bug | incorrect_derivation | logical_error",
-      "explanation": "short explanation"
-    }}
-  ],
-  "questions": [
-    "generate 2–3 clarifying questions the user should answer"
-  ],
-  "summary": "short rigorous overview of the solution's main problems or strengths"
+  "steps": [{{"id": "s1", "text": "...", "role": "assumption|deduction|claim|definition|conclusion|code_statement|explanation"}}],
+  "issues": [{{"step_id": "s1", "type": "missing_justification|faulty_logic|misuse_of_theorem|undefined_term|code_bug|incorrect_derivation|logical_error", "explanation": "..."}}],
+  "questions": ["..."],
+  "summary": "..."
 }}
 
-Requirements:
-Output only valid JSON.
-Be precise, concise, and technical.
-Follow the user's solution structure; do not invent nonexistent steps.
-If the input is code, treat code statements as steps.
-If the input is a derivation, treat each equation manipulation as a step.
-If the input is a mathematical proof, analyze each logical step.
-If the input is a logical reasoning argument, analyze the argument structure.
-If unsure how to interpret something, ask a clarifying question in "questions".
-ALWAYS return valid JSON - if the input seems incomplete, identify what's present and what's missing.
-NEVER refuse to analyze - always provide analysis in the JSON format.
+Example: {{"steps": [{{"id": "s1", "text": "Assume P", "role": "assumption"}}], "issues": [], "questions": ["Why P?"], "summary": "Basic assumption"}}
 
-User's solution attempt:
+Return ONLY JSON, no markdown, no explanations.
 
+Solution attempt:
 {}"#,
         user_proof
     )
@@ -196,54 +161,22 @@ pub fn build_step2_prompt(
     user_answers: &str,
 ) -> String {
     format!(
-        r#"You will continue a Socratic solution-improvement dialogue.
-
-You are given:
-- the user's original solution attempt (proof, derivation, code explanation, etc.)
-- the structured issues you identified
-- the clarifying questions you asked
-- the user's answers to those questions
-
-Your job now:
-- Evaluate the user's answers
-- Determine whether they fix each issue
-- Produce next-step guidance
-- Return ONLY valid JSON in the schema:
+        r#"Evaluate answers and return ONLY valid JSON:
 
 {{
-  "evaluation": [
-    {{
-      "question": "the original question",
-      "user_answer": "the user's response",
-      "assessment": "correct | partially_correct | incorrect | unclear",
-      "comment": "1–2 sentence explanation"
-    }}
-  ],
-  "next_tasks": [
-    "one or two specific instructions the user should do next"
-  ],
+  "evaluation": [{{"question": "...", "user_answer": "...", "assessment": "correct|partially_correct|incorrect|unclear", "comment": "..."}}],
+  "next_tasks": ["..."],
   "needs_revision": true
 }}
 
-Rules:
-Be technically rigorous but concise.
-Keep comments extremely short.
-Output only JSON.
-Evaluate answers in context of the solution domain (math, code, RL, ML, etc.).
+Example: {{"evaluation": [{{"question": "Why P?", "user_answer": "Because Q", "assessment": "correct", "comment": "Valid reasoning"}}], "next_tasks": ["Prove Q"], "needs_revision": false}}
 
-Inputs:
+Return ONLY JSON, no markdown, no explanations.
 
-Original solution:
-{}
-
-Issues detected:
-{}
-
-Clarifying questions:
-{}
-
-User answers:
-{}"#,
+Original: {}
+Issues: {}
+Questions: {}
+Answers: {}"#,
         original_proof, issues_json, questions, user_answers
     )
 }

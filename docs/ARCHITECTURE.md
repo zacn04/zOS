@@ -2,7 +2,7 @@
 
 ## Overview
 
-zOS is a defensive-first codebase designed with E4+ engineering standards. All architectural decisions prioritize safety, observability, and maintainability.
+zOS is a defensive-first codebase designed with high engineering standards. All architectural decisions prioritize safety, observability, and maintainability.
 
 ## Core Principles
 

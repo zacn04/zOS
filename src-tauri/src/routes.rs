@@ -9,7 +9,6 @@ use crate::brain::TaskDirective;
 use crate::analytics::{AnalyticsPayload, compute_analytics};
 use crate::state::session::{get_state, set_state, reset_state, log_state, ProofState};
 use crate::state::app::AppState;
-use crate::error::ZosError;
 use chrono::Utc;
 use tauri::State;
 
@@ -42,12 +41,14 @@ pub async fn run_proof_pipeline(
 
 #[tauri::command]
 pub async fn run_proof_followup(
+    state: State<'_, std::sync::Arc<AppState>>,
     original_proof: String,
     issues_json: String,
     questions: String,
     user_answers: String,
 ) -> Result<Step2Response, String> {
-    match call_deepseek_step2(&original_proof, &issues_json, &questions, &user_answers).await {
+    let app_state = state.inner();
+    match call_deepseek_step2(app_state, &original_proof, &issues_json, &questions, &user_answers).await {
         Ok(response) => Ok(response),
         Err(e) => Err(format!("Model error: {}", e)),
     }
@@ -202,12 +203,16 @@ pub async fn step2_evaluate_answers(
 }
 
 #[tauri::command]
-pub async fn get_recommended_problem() -> Result<Problem, String> {
+pub async fn get_recommended_problem(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<Problem, String> {
+    let app_state = state.inner();
     // Reset state when getting a new problem (user explicitly requested a new problem)
-    reset_state();
-    log_state();
+    reset_state(app_state);
+    log_state(app_state);
     
-    let skills = store::get_skills();
+    let skills = store::get_skills(app_state).await
+        .map_err(|e| format!("Failed to get skills: {}", e))?;
     let problems = Problem::load_all()
         .map_err(|e| format!("Failed to load problems: {}", e))?;
     
@@ -225,12 +230,12 @@ pub async fn get_recommended_problem() -> Result<Problem, String> {
     };
     
     // FIRST: Try to get a cached problem (fast, no LLM call)
-    let mut cached = crate::problems::cache::ProblemCache::load();
+    let mut cached = crate::problems::cache::ProblemCache::load_async().await;
     if let Some(pos) = cached.queue.iter()
         .position(|p| p.topic == weakest_skill) {
         let problem = cached.queue.remove(pos);
         // Save updated cache
-        let _ = cached.save();
+        let _ = cached.save_async().await;
         tracing::info!(skill = %weakest_skill, "Using cached problem");
         return Ok(problem);
     }
@@ -251,20 +256,22 @@ pub async fn get_recommended_problem() -> Result<Problem, String> {
     // Otherwise, skip static problems and proceed to generation
     
     // THIRD: Try to get a task from the daily plan (may generate, but only if needed)
-    if let Some(mut plan) = crate::brain::store::load() {
+    if let Some(mut plan) = crate::brain::store::load().await
+        .map_err(|e| format!("Failed to load plan: {}", e))? {
         if !plan.is_expired() && !plan.tasks.is_empty() {
             // Pop first directive
             let directive = plan.tasks.remove(0);
             
             // Save back reduced plan
-            if let Err(e) = crate::brain::store::save(&plan) {
+            if let Err(e) = crate::brain::store::save(&plan).await {
                 eprintln!("Failed to save updated plan: {}", e);
             }
             
             match directive {
                 TaskDirective::Adaptive { skill, difficulty: base_difficulty } => {
                     // Apply difficulty annealing based on recent performance
-                    let success_rate = recent_success_rate(&skill, 5);
+                    let success_rate = recent_success_rate(&skill, 5).await
+                        .unwrap_or(0.5);
                     let annealed_difficulty = anneal_difficulty(base_difficulty, success_rate);
                     
                 tracing::info!(
@@ -276,7 +283,7 @@ pub async fn get_recommended_problem() -> Result<Problem, String> {
                 );
                     
                     // Generate a new problem for this skill with annealed difficulty
-                    match generator::generate_problem(&skill, annealed_difficulty).await {
+                    match generator::generate_problem(app_state, &skill, annealed_difficulty).await {
                         Ok(problem) => return Ok(problem),
                         Err(e) => {
                             tracing::warn!(skill = %skill, error = %e, "Failed to generate problem");
@@ -286,7 +293,8 @@ pub async fn get_recommended_problem() -> Result<Problem, String> {
                 }
                 TaskDirective::Review { skill } => {
                     // Find a failed problem for this skill to review
-                    let fails = load_all_sessions();
+                    let fails = load_all_sessions().await
+                        .map_err(|e| format!("Failed to load sessions: {}", e))?;
                     if let Some(fail) = fails.into_iter()
                         .rev()
                         .find(|s| s.skill == skill && 
@@ -308,7 +316,8 @@ pub async fn get_recommended_problem() -> Result<Problem, String> {
     
     // FINAL FALLBACK: Generate a problem with difficulty annealing (slow, LLM call)
     // Get recent success rate and determine difficulty
-    let success_rate = recent_success_rate(&weakest_skill, 5);
+    let success_rate = recent_success_rate(&weakest_skill, 5).await
+        .unwrap_or(0.5);
     
     // Get last difficulty used for this skill, or default based on skill level
     let skill_value = skills.skills.get(&weakest_skill).copied().unwrap_or(0.5);
@@ -326,7 +335,7 @@ pub async fn get_recommended_problem() -> Result<Problem, String> {
     );
     
     // Try to generate a problem with annealed difficulty
-    match generator::generate_problem(&weakest_skill, annealed_difficulty).await {
+    match generator::generate_problem(app_state, &weakest_skill, annealed_difficulty).await {
         Ok(problem) => Ok(problem),
         Err(e) => {
             tracing::warn!(skill = %weakest_skill, error = %e, "Failed to generate problem");
@@ -359,25 +368,34 @@ pub fn get_problems_by_topic(topic: String) -> Result<Vec<Problem>, String> {
 }
 
 #[tauri::command]
-pub fn get_skills() -> Result<SkillVector, String> {
-    Ok(store::get_skills())
+pub async fn get_skills(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<SkillVector, String> {
+    store::get_skills(state.inner()).await
+        .map_err(|e| format!("Failed to get skills: {}", e))
 }
 
 #[tauri::command]
-pub fn update_skills_from_issues(issues: Vec<ProofIssue>) -> Result<SkillVector, String> {
-    store::update_skills(|skills| {
+pub async fn update_skills_from_issues(
+    state: State<'_, std::sync::Arc<AppState>>,
+    issues: Vec<ProofIssue>,
+) -> Result<SkillVector, String> {
+    let app_state = state.inner();
+    store::update_skills(app_state, |skills| {
         skills.update_from_issues(&issues);
-    });
-    let skills = store::get_skills();
-    if let Err(e) = skills_store::save_skill_vector(&skills) {
+    }).await
+        .map_err(|e| format!("Failed to update skills: {}", e))?;
+    let skills = store::get_skills(app_state).await
+        .map_err(|e| format!("Failed to get skills: {}", e))?;
+    if let Err(e) = skills_store::save_skill_vector(&skills).await {
         eprintln!("Failed to save skills: {}", e);
     }
     Ok(skills)
 }
 
 #[tauri::command]
-pub fn save_session_record(record: SessionRecord) -> Result<(), String> {
-    save_session(&record).map_err(|e| e.to_string())
+pub async fn save_session_record(record: SessionRecord) -> Result<(), String> {
+    save_session(&record).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -414,43 +432,50 @@ pub async fn get_skill_drift(skill: String) -> Result<f32, String> {
 }
 
 #[tauri::command]
-pub fn fetch_cached_problem() -> Result<Problem, String> {
-    let mut cache = crate::problems::cache::ProblemCache::load();
+pub async fn fetch_cached_problem() -> Result<Problem, String> {
+    let mut cache = crate::problems::cache::ProblemCache::load_async().await;
     cache.queue.pop().ok_or("Cache empty".to_string())
 }
 
 #[tauri::command]
-pub fn refresh_daily_plan() -> Result<(), String> {
-    let plan = crate::brain::generate_daily_plan();
-    crate::brain::store::save(&plan).map_err(|e| e.to_string())
+pub async fn refresh_daily_plan() -> Result<(), String> {
+    let plan = crate::brain::generate_daily_plan().await;
+    crate::brain::store::save(&plan).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn get_daily_plan() -> Result<crate::brain::CurriculumPlan, String> {
-    crate::brain::store::load().ok_or("No plan".into())
+pub async fn get_daily_plan() -> Result<crate::brain::CurriculumPlan, String> {
+    crate::brain::store::load().await
+        .map_err(|e| format!("Failed to load plan: {}", e))?
+        .ok_or("No plan".into())
 }
 
 #[tauri::command]
-pub fn get_analytics_data() -> Result<AnalyticsPayload, String> {
-    Ok(compute_analytics())
+pub async fn get_analytics_data() -> Result<AnalyticsPayload, String> {
+    Ok(compute_analytics().await)
 }
 
 #[tauri::command]
-pub fn reset_all_progress() -> Result<(), String> {
+pub async fn reset_all_progress(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<(), String> {
     use std::fs;
     use crate::skills::store as skills_store;
     use crate::sessions;
     use crate::problems::cache::ProblemCache;
     
+    let app_state = state.inner();
+    
     // Reset skills to defaults
     let default_skills = crate::skills::model::SkillVector::new();
-    skills_store::save_skill_vector(&default_skills)
+    skills_store::save_skill_vector(&default_skills).await
         .map_err(|e| format!("Failed to reset skills: {}", e))?;
     
     // Clear in-memory skills store
-    crate::memory::store::update_skills(|skills| {
+    crate::memory::store::update_skills(app_state, |skills| {
         *skills = default_skills.clone();
-    });
+    }).await
+        .map_err(|e| format!("Failed to update skills: {}", e))?;
     
     // Delete all session files
     let sessions_dir = sessions::sessions_dir();
@@ -470,7 +495,7 @@ pub fn reset_all_progress() -> Result<(), String> {
     
     // Clear problem cache
     let cache = ProblemCache::default();
-    let _ = cache.save();
+    let _ = cache.save_async().await;
     
     Ok(())
 }

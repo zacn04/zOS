@@ -27,6 +27,7 @@ impl LocalModel {
             LocalModel::QwenInstruct(m) => m.call_json(prompt).await,
         }
     }
+    
 
     pub async fn call_text(&self, prompt: &str) -> anyhow::Result<String> {
         match self {

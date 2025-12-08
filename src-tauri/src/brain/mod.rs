@@ -27,16 +27,19 @@ impl CurriculumPlan {
 }
 
 /// Compute 7-day skill trend (Δ skill score).
-pub fn compute_weekly_trends() -> HashMap<String, f32> {
-    skill_trends(7)
+pub async fn compute_weekly_trends() -> HashMap<String, f32> {
+    skill_trends(7).await
 }
 
 /// Compute N-day skill trend (Δ skill score).
-fn skill_trends(days: i64) -> HashMap<String, f32> {
+async fn skill_trends(days: i64) -> HashMap<String, f32> {
     let cutoff = Utc::now() - Duration::days(days);
     let mut hist: HashMap<String, Vec<(i64, f32)>> = HashMap::new();
     
-    for s in load_all_sessions().into_iter().filter(|s| s.timestamp > cutoff.timestamp()) {
+    let all_sessions = load_all_sessions().await
+        .unwrap_or_default();
+    
+    for s in all_sessions.into_iter().filter(|s| s.timestamp > cutoff.timestamp()) {
         hist.entry(s.skill.clone())
             .or_default()
             .push((s.timestamp, s.skill_after));
@@ -56,9 +59,9 @@ fn skill_trends(days: i64) -> HashMap<String, f32> {
 }
 
 /// Build the plan: 2 weakest-skill drills + review any negative trend.
-pub fn generate_daily_plan() -> CurriculumPlan {
-    let skills = load_skill_vector();
-    let trends = compute_weekly_trends();
+pub async fn generate_daily_plan() -> CurriculumPlan {
+    let skills = load_skill_vector().await;
+    let trends = compute_weekly_trends().await;
 
     // Weakest two skills
     let mut weakest: Vec<_> = skills.skills.iter().collect();

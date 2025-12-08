@@ -179,7 +179,7 @@ pub async fn recent_success_rate(skill: &str, n: usize) -> Result<f32, ZosError>
     
     // Need at least 3 attempts for meaningful data
     if recent.len() < 3 {
-        return 0.5;
+        return Ok(0.5);
     }
     
     // Count correct sessions

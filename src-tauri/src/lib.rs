@@ -43,9 +43,7 @@ pub fn run() {
     
     // Initialize problems directory (copy to app data if needed)
     // Note: This is still blocking, but it's a one-time setup
-    if let Err(e) = problems::problem::Problem::initialize_problems_dir() {
-        tracing::warn!(error = %e, "Failed to initialize problems directory");
-    }
+    problems::problem::Problem::initialize_problems_dir();
     
     // Initialize async runtime for startup tasks
     let rt = tokio::runtime::Runtime::new()
@@ -65,7 +63,7 @@ pub fn run() {
         match brain::store::load().await {
             Ok(Some(plan)) => {
                 if plan.is_expired() {
-                    let new_plan = brain::generate_daily_plan();
+                    let new_plan = brain::generate_daily_plan().await;
                     if let Err(e) = brain::store::save(&new_plan).await {
                         tracing::warn!(error = %e, "Failed to save daily plan");
                     }
@@ -73,7 +71,7 @@ pub fn run() {
             }
             Ok(None) => {
                 // No plan exists, generate one
-                let new_plan = brain::generate_daily_plan();
+                let new_plan = brain::generate_daily_plan().await;
                 if let Err(e) = brain::store::save(&new_plan).await {
                     tracing::warn!(error = %e, "Failed to save daily plan");
                 }
@@ -112,8 +110,7 @@ pub fn run() {
             routes::fetch_cached_problem,
             routes::refresh_daily_plan,
             routes::get_daily_plan,
-            routes::get_analytics_data,
-            routes::reset_all_progress
+            routes::get_analytics_data
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

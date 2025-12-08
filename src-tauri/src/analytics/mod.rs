@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use crate::sessions::load_all_sessions;
-use crate::brain::compute_weekly_trends;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AnalyticsPayload {
@@ -11,8 +10,9 @@ pub struct AnalyticsPayload {
     pub weekly_trends: HashMap<String, f32>,
 }
 
-pub fn compute_analytics() -> AnalyticsPayload {
-    let all_sessions = load_all_sessions();
+pub async fn compute_analytics() -> AnalyticsPayload {
+    let all_sessions = load_all_sessions().await
+        .unwrap_or_default();
     
     let mut skill_history: HashMap<String, Vec<(i64, f32)>> = HashMap::new();
     let mut session_counts: HashMap<String, usize> = HashMap::new();
@@ -50,7 +50,7 @@ pub fn compute_analytics() -> AnalyticsPayload {
         .collect();
     
     // Get weekly trends
-    let weekly_trends = compute_weekly_trends();
+    let weekly_trends = crate::brain::compute_weekly_trends().await;
     
     AnalyticsPayload {
         skill_history,

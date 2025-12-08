@@ -4,7 +4,18 @@ use crate::error::ZosError;
 
 /// Get skills from AppState, loading from disk if not cached
 pub async fn get_skills(state: &AppState) -> Result<SkillVector, ZosError> {
-    state.get_skills()
+    // Check if already cached
+    {
+        let guard = state.skills.read();
+        if let Some(skills) = guard.as_ref() {
+            return Ok(skills.clone());
+        }
+    }
+    
+    // Load from disk
+    let skills = crate::skills::store::load_skill_vector().await;
+    state.set_skills(skills.clone());
+    Ok(skills)
 }
 
 /// Update skills in AppState and persist to disk
@@ -12,11 +23,19 @@ pub async fn update_skills<F>(state: &AppState, f: F) -> Result<(), ZosError>
 where
     F: FnOnce(&mut SkillVector),
 {
+    // Ensure skills are loaded
+    let _ = get_skills(state).await?;
+    
     // Update in memory
     state.update_skills(f)?;
     
     // Load current skills and save to disk
-    let skills = state.get_skills()?;
+    let skills = {
+        let guard = state.skills.read();
+        guard.as_ref()
+            .ok_or_else(|| ZosError::new("Skills not loaded", "state"))?
+            .clone()
+    };
     crate::skills::store::save_skill_vector(&skills).await?;
     
     Ok(())

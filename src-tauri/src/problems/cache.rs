@@ -1,4 +1,5 @@
-use serde::{Serialize, Deserialize, Clone};
+use serde::{Serialize, Deserialize};
+use std::clone::Clone;
 use std::sync::Arc;
 use parking_lot::Mutex;
 use tokio::time::{sleep, Duration};
@@ -142,7 +143,7 @@ impl ProblemCache {
     }
 }
 
-pub async fn start_problem_prefetch(cache: Arc<Mutex<ProblemCache>>) {
+pub async fn start_problem_prefetch(cache: Arc<Mutex<ProblemCache>>, state: Arc<crate::state::app::AppState>) {
     tokio::spawn(async move {
         loop {
             let needs_more = {
@@ -158,55 +159,66 @@ pub async fn start_problem_prefetch(cache: Arc<Mutex<ProblemCache>>) {
                     let diff = (0.3_f32).max(1.0 - value);
                     
                     // Generate new problem for this skill (outside mutex)
-                    let generated = generator::generate_problem(&skill, diff).await;
+                    let generated = generator::generate_problem(&state, &skill, diff).await;
                     
-                    // Now lock and add to cache
-                    let mut guard = cache.lock();
-                    if guard.queue.len() >= MIN_CACHE {
-                        break;
-                    }
-                    
-                    match generated {
-                        Ok(problem) => {
-                            guard.queue.push(problem);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                skill = %skill,
-                                error = %e,
-                                "Failed to generate problem, trying fallback"
-                            );
-                            // Fallback to loading existing problems if generation fails
-                            match Problem::load_all() {
-                                Ok(all_problems) => {
-                                    let matching: Vec<Problem> = all_problems.iter()
-                                        .filter(|p| p.topic == skill)
-                                        .cloned()
-                                        .collect();
-                                    
-                                    for problem in matching.into_iter().take(2) {
-                                        if guard.queue.len() >= MIN_CACHE {
-                                            break;
-                                        }
-                                        guard.queue.push(problem);
-                                    }
+                    // Process generated problem and update cache
+                    let needs_save = {
+                        let mut guard = cache.lock();
+                        if guard.queue.len() >= MIN_CACHE {
+                            false // Don't save, we're done
+                        } else {
+                            match generated {
+                                Ok(problem) => {
+                                    guard.queue.push(problem);
+                                    true
                                 }
                                 Err(e) => {
                                     tracing::warn!(
                                         skill = %skill,
                                         error = %e,
-                                        "Failed to load problems for fallback"
+                                        "Failed to generate problem, trying fallback"
                                     );
+                                    // Fallback to loading existing problems if generation fails
+                                    match Problem::load_all() {
+                                        Ok(all_problems) => {
+                                            let matching: Vec<Problem> = all_problems.iter()
+                                                .filter(|p| p.topic == skill)
+                                                .cloned()
+                                                .collect();
+                                            
+                                            let mut added = false;
+                                            for problem in matching.into_iter().take(2) {
+                                                if guard.queue.len() >= MIN_CACHE {
+                                                    break;
+                                                }
+                                                guard.queue.push(problem);
+                                                added = true;
+                                            }
+                                            added
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!(
+                                                skill = %skill,
+                                                error = %e,
+                                                "Failed to load problems for fallback"
+                                            );
+                                            false
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
+                    };
                     
-                    // Save cache asynchronously (outside lock)
-                    let cache_clone = guard.clone();
-                    drop(guard);
-                    if let Err(e) = cache_clone.save_async().await {
-                        tracing::warn!(error = %e, "Failed to save problem cache");
+                    // Save cache asynchronously (outside lock scope)
+                    if needs_save {
+                        let cache_clone = {
+                            let guard = cache.lock();
+                            guard.clone()
+                        }; // Guard is dropped here
+                        if let Err(e) = cache_clone.save_async().await {
+                            tracing::warn!(error = %e, "Failed to save problem cache");
+                        }
                     }
                 }
             }

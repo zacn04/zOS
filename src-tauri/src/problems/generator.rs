@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use chrono::Utc;
 use crate::problems::problem::Problem;
 use crate::pipelines::router::TaskType;
-use crate::pipelines::perf;
 
 pub fn hash_statement(statement: &str) -> String {
     let mut hasher = Sha256::new();
@@ -132,7 +131,7 @@ fn get_autogen_dir() -> PathBuf {
     PathBuf::from("problems/autogen")
 }
 
-pub async fn generate_problem(skill: &str, diff: f32) -> Result<Problem> {
+pub async fn generate_problem(state: &crate::state::app::AppState, skill: &str, diff: f32) -> Result<Problem> {
     use crate::pipelines::perf;
     let _perf = perf::PerfTimer::new("problem_generation_total");
     let difficulty_str = if diff < 0.3 {
@@ -144,36 +143,20 @@ pub async fn generate_problem(skill: &str, diff: f32) -> Result<Problem> {
     };
     
     let prompt = format!(
-        r#"Generate a new {difficulty_str} problem for the skill domain: {skill}.
+        r#"Generate a {difficulty_str} problem for {skill}. Return ONLY valid JSON:
 
-Return ONLY valid JSON in the following schema:
+{{"id": "autogen_<unique_id>", "topic": "{skill}", "difficulty": {diff}, "statement": "...", "solution_sketch": "..."}}
 
-{{
-  "id": "autogen_<unique_id>",
-  "topic": "{skill}",
-  "difficulty": {diff},
-  "statement": "the problem statement or question",
-  "solution_sketch": "a brief outline of the solution approach as a single string (NOT an array or object)"
-}}
+Example: {{"id": "autogen_1234567890_logical_reasoning", "topic": "logical_reasoning", "difficulty": 0.5, "statement": "Prove X", "solution_sketch": "Use method Y"}}
 
-Requirements:
-- The problem should be appropriate for {difficulty_str} difficulty level
-- The problem should be clearly stated and solvable
-- The solution_sketch MUST be a single string (not an array or object) that provides guidance without giving away the full answer
-- Make the problem unique and interesting
-- For coding problems, include code snippets if relevant
-- For math/proof problems, be precise and mathematical
-- Output only valid JSON, no markdown or extra text
-- IMPORTANT: solution_sketch must be a string, not an array or object
-
-Generate the problem now:"#
+Use plain text (no LaTeX). Return ONLY JSON, no markdown, no explanations."#
     );
     
     // Use unified query system with caching, retry, and fallback
     use crate::pipelines::router::zos_query;
     use crate::error::ZosError;
     
-    let mut problem: Problem = zos_query::<Problem>(TaskType::ProblemGeneration, prompt.clone())
+    let mut problem: Problem = zos_query::<Problem>(state, TaskType::ProblemGeneration, prompt.clone())
         .await
         .map_err(|e: ZosError| anyhow::anyhow!("Failed to generate problem: {}", e.message))?;
     

@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use parking_lot::RwLock;
 
 /// Circuit breaker for model availability tracking

@@ -35,37 +35,37 @@ impl AppState {
         }
     }
 
-    /// Get skills, loading from disk if not cached
+    /// Get skills, loading from disk if not cached (synchronous - returns cached value or error)
+    /// For loading from disk, use memory::store::get_skills() instead
     pub fn get_skills(&self) -> Result<SkillVector, crate::error::ZosError> {
-        let mut guard = self.skills.write();
-        if guard.is_none() {
-            // Load from disk (async will be handled by caller)
-            *guard = Some(crate::skills::store::load_skill_vector());
-        }
+        let guard = self.skills.read();
         guard.as_ref()
             .ok_or_else(|| crate::error::ZosError::new(
-                "Failed to load skills",
+                "Skills not loaded - use memory::store::get_skills() to load from disk",
                 "state"
             ))
             .map(|s| s.clone())
     }
 
-    /// Update skills with a closure
+    /// Update skills with a closure (requires skills to already be loaded)
+    /// For loading from disk first, use memory::store::update_skills() instead
     pub fn update_skills<F>(&self, f: F) -> Result<(), crate::error::ZosError>
     where
         F: FnOnce(&mut SkillVector),
     {
         let mut guard = self.skills.write();
-        if guard.is_none() {
-            *guard = Some(crate::skills::store::load_skill_vector());
-        }
         let skills = guard.as_mut()
             .ok_or_else(|| crate::error::ZosError::new(
-                "Failed to access skills",
+                "Skills not loaded - use memory::store::update_skills() to load from disk first",
                 "state"
             ))?;
         f(skills);
         Ok(())
+    }
+    
+    /// Set skills directly (for initialization from async load)
+    pub fn set_skills(&self, skills: SkillVector) {
+        *self.skills.write() = Some(skills);
     }
 
     /// Get current session state
