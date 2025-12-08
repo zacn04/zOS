@@ -1,4 +1,4 @@
-# **zOS — Local Reasoning Runtime**
+# **zOS — not an operating system
 
 ![Rust](https://img.shields.io/badge/Rust-stable-orange)
 ![SvelteKit](https://img.shields.io/badge/SvelteKit-frontend-red)
