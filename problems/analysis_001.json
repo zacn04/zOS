@@ -1,0 +1,8 @@
+{
+  "id": "analysis_001",
+  "topic": "analysis_math",
+  "difficulty": 0.5,
+  "statement": "Prove that the limit of (1 + 1/n)^n as n approaches infinity equals e. Use the definition of e as the sum of the infinite series.",
+  "solution_sketch": "Use the binomial theorem to expand (1 + 1/n)^n. Show that as n -> infinity, this converges to the series sum_{k=0}^∞ 1/k!. Use the definition of e^x and show e^1 = e."
+}
+

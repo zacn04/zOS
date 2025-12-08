@@ -145,11 +145,11 @@ These systems exist to support long-term reasoning practice.
 
 Default configuration:
 
-* `deepseek-r1:7b` — analysis & reasoning
-* `qwen2.5:7b-math` — technical/mathy generation
-* `qwen2.5:7b-instruct` — generic tasks / fallback
+* `deepseek-r1:7b` — proof/solution analysis and evaluation
+* `qwen2-math:7b` — math/technical problem generation (experimental)
+* `qwen2.5:7b-instruct` — general or fallback tasks
 
-Configurable via `models.toml`.
+Models are configurable via `models.toml` in the app data directory.
 
 ---
 
@@ -177,37 +177,114 @@ The 10-dimensional skill vector tracks:
 * Rust (stable)
 * Node.js 18+
 * pnpm
-* Ollama
+* Ollama with required models pulled and available
 
-### Setup
+Suggested setup on macOS:
 
-```bash
-git clone <repo-url>
-cd personal-os
-pnpm install
-ollama serve
-```
+* Install Ollama: `brew install ollama`
+* Pull models:
 
-### Development
-
-```bash
-pnpm tauri dev     # hot-reload desktop app
-pnpm tauri build   # production bundle
-```
-
-Rust tests:
-
-```bash
-cd src-tauri && cargo test
-```
+  * `ollama pull deepseek-r1:7b`
+  * `ollama pull qwen2-math:7b`
+  * `ollama pull qwen2.5:7b-instruct`
+* Start Ollama: `ollama serve`
 
 ---
 
-# **Configuration**
+## Installation
 
-### Models (`models.toml`)
+1. Clone the repository: `git clone <repository-url>`
+2. Enter the project directory: `cd personal-os`
+3. Install dependencies: `pnpm install`
+4. Start Ollama if needed: `ollama serve`
 
-Platform-specific app data directory:
+---
+
+## Development
+
+Run in development mode:
+
+* `pnpm tauri dev`
+
+This starts the Svelte dev server, builds and runs the Tauri app, and enables hot reload for frontend and backend.
+
+Build a production bundle:
+
+* `pnpm tauri build`
+
+The built application will be under `src-tauri/target/release/bundle/`.
+
+Run tests:
+
+* Rust tests: `cd src-tauri && cargo test`
+* TypeScript/Svelte checks: `pnpm check`
+
+---
+
+## Configuration
+
+### Model Configuration
+
+Models are configured via `models.toml` in the platform-specific app data directory:
+
+* macOS: `~/Library/Application Support/com.zacnwo.zos/models.toml`
+* Windows: `%APPDATA%/com.zacnwo.zos/models.toml`
+* Linux: `~/.local/share/com.zacnwo.zos/models.toml`
+
+Default values:
+
+* `proof_model = "deepseek-r1:7b"`
+* `problem_model = "qwen2-math:7b"`
+* `general_model = "qwen2.5:7b-instruct"`
+
+If the file does not exist, defaults are used.
+
+### Environment Variables
+
+* `ZOS_USE_STATIC_EXAMPLES=true`
+
+  * Enables static problems in Solve mode
+  * Without this, Solve mode prefers LLM-based generation, which is experimental and may fail
+  * Learn mode always shows static problems regardless
+
+### Ollama Endpoint
+
+The app expects Ollama at `http://localhost:11434` with the configured models available.
+
+---
+
+## Project Structure
+
+`personal-os/`
+
+* `src/` Svelte frontend
+
+  * `routes/`
+
+    * `+page.svelte` Home page
+    * `solve/` Problem solving UI
+    * `learn/` Topic browsing
+    * `improve/` Skills and daily plan
+    * `history/` Sessions and analytics
+* `src-tauri/` Rust backend
+
+  * `problems/` problem loading, selection, generation, cache
+  * `skills/` skill vector and persistent store
+  * `sessions/` session records and history
+  * `brain/` daily plan logic and persistence
+  * `analytics/` metrics computation
+  * `pipelines/` router, proof pipeline, Ollama client, JSON extraction
+  * `models/` model wrappers and registry
+  * `state/` app-level state and caches
+  * `config/` model config loader
+* `problems/` static JSON problem files
+* `package.json`
+
+---
+
+## Data Storage
+
+User data is stored in platform-specific application data directories:
 
 * macOS: `~/Library/Application Support/com.zacnwo.zos/`
 * Linux: `~/.local/share/com.zacnwo.zos/`

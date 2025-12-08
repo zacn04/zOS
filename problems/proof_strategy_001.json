@@ -1,0 +1,8 @@
+{
+  "id": "proof_strategy_001",
+  "topic": "proof_strategy",
+  "difficulty": 0.4,
+  "statement": "Prove by contradiction that √2 is irrational. Structure your proof clearly with assumptions, logical steps, and the contradiction.",
+  "solution_sketch": "Assume √2 = p/q in lowest terms. Square both sides: 2 = p^2/q^2, so p^2 = 2q^2. This means p^2 is even, so p is even. Write p = 2k, substitute, show q is even, contradicting that p/q is in lowest terms."
+}
+

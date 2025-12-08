@@ -1,0 +1,8 @@
+{
+  "id": "coding_001",
+  "topic": "coding_debugging",
+  "difficulty": 0.2,
+  "statement": "Find the bug in this Python snippet and explain why it breaks:\n\ndef f(n):\n    for i in range(n):\n        return i\n\nWhat will f(5) return? Why?",
+  "solution_sketch": "The return statement is inside the loop, so it returns on the first iteration. The function will always return 0 (or raise an error if n=0). The return should be outside the loop, or the function should collect values in a list."
+}
+

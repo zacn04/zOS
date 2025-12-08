@@ -99,7 +99,7 @@ pub fn sanitize_raw_output(raw: &str) -> String {
 pub fn fix_unescaped_backslashes(json: &str) -> String {
     // Common LaTeX patterns that need fixing in JSON strings
     // We'll replace them with properly escaped versions
-    let mut result = json.to_string();
+    let result = json.to_string();
     
     // Fix common LaTeX patterns that appear in string values
     // Note: This is a simple approach - replace known problematic patterns

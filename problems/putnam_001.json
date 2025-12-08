@@ -1,0 +1,8 @@
+{
+  "id": "putnam_001",
+  "topic": "putnam_competition",
+  "difficulty": 0.8,
+  "statement": "Show that for any integer n > 1, the expression n^4 + 4 is composite.",
+  "solution_sketch": "Use Sophie Germain's identity: a^4 + 4b^4 = (a^2 + 2b^2 - 2ab)(a^2 + 2b^2 + 2ab). For n^4 + 4, factor as (n^2 + 2n + 2)(n^2 - 2n + 2). Show both factors are greater than 1 for n > 1."
+}
+

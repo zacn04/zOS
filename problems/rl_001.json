@@ -1,0 +1,8 @@
+{
+  "id": "rl_001",
+  "topic": "rl_theory",
+  "difficulty": 0.3,
+  "statement": "Derive the Bellman Optimality Equation for the action-value function Q*. Show that Q*(s,a) = R(s,a) + γ * max_a' Q*(s',a') for the optimal policy.",
+  "solution_sketch": "Start with the definition of Q* as the expected return under the optimal policy. Use the law of total expectation and the Markov property. Show that the optimal action-value function satisfies the recursive relationship through dynamic programming principles."
+}
+

@@ -1,0 +1,8 @@
+{
+  "id": "algo_001",
+  "topic": "algorithms",
+  "difficulty": 0.3,
+  "statement": "Prove that Dijkstra's algorithm correctly finds shortest paths in a graph with non-negative edge weights. Show that once a vertex is extracted from the priority queue, its distance is optimal.",
+  "solution_sketch": "Use proof by contradiction. Assume a vertex u is extracted with non-optimal distance. Show that any path to u must pass through a vertex with distance >= d[u], leading to a contradiction. Use the non-negative weight assumption."
+}
+

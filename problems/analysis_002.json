@@ -1,0 +1,8 @@
+{
+  "id": "analysis_002",
+  "topic": "analysis_math",
+  "difficulty": 0.6,
+  "statement": "Prove that a continuous function on a closed interval [a,b] is uniformly continuous.",
+  "solution_sketch": "Use proof by contradiction. Assume f is not uniformly continuous. Construct sequences that violate the definition. Use compactness of [a,b] and the fact that every sequence has a convergent subsequence to derive a contradiction."
+}
+

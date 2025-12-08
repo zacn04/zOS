@@ -1,0 +1,8 @@
+{
+  "id": "ml_001",
+  "topic": "ml_theory",
+  "difficulty": 0.4,
+  "statement": "Prove that logistic regression's negative log-likelihood is convex. Show that the Hessian matrix is positive semi-definite.",
+  "solution_sketch": "Write the negative log-likelihood for logistic regression. Compute the Hessian matrix. Show that for any vector v, v^T H v >= 0 by using properties of the sigmoid function and its derivatives."
+}
+

@@ -1,0 +1,8 @@
+{
+  "id": "algo_002",
+  "topic": "algorithms",
+  "difficulty": 0.5,
+  "statement": "Prove the correctness of the greedy algorithm for the activity selection problem. Show that the greedy choice property holds.",
+  "solution_sketch": "Show that there exists an optimal solution that includes the activity with the earliest finish time. Use exchange argument: if an optimal solution doesn't include the greedy choice, replace the first activity with the greedy choice to get an equally good or better solution."
+}
+

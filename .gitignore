@@ -1,0 +1,58 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+/build
+/.svelte-kit
+/package
+dist/
+target/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# IDE/Editor files
+.vscode/*
+!.vscode/extensions.json
+.cursor/
+.idea/
+*.swp
+*.swo
+*~
+
+# User data and generated files (sensitive)
+**/Library/Application Support/com.zacnwo.zos/
+**/APPDATA/com.zacnwo.zos/
+**/.local/share/com.zacnwo.zos/
+data/
+*.log
+logs/
+
+# Generated problem files (user-generated, should not be committed)
+problems/autogen/
+src-tauri/problems/autogen/
+**/autogen/
+
+# Cache files
+*.cache
+problems_cache.json
+
+# PDF files (if generated)
+README.pdf
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

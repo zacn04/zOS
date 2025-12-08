@@ -58,6 +58,9 @@ pub async fn run_proof_followup(
 pub async fn step1_analyze_proof(
     state: State<'_, std::sync::Arc<AppState>>,
     proof: String,
+    problem_id: Option<String>,
+    problem_topic: Option<String>,
+    problem_difficulty: Option<f32>,
 ) -> Result<Step1Response, String> {
     let app_state = state.inner();
     
@@ -74,6 +77,14 @@ pub async fn step1_analyze_proof(
         }
     }
     
+    // Get skill before update
+    let skills_before = store::get_skills(app_state).await
+        .map_err(|e| format!("Failed to get skills: {}", e))?;
+    let skill_before = problem_topic.as_ref()
+        .and_then(|topic| skills_before.skills.get(topic))
+        .copied()
+        .unwrap_or(0.5);
+    
     match call_deepseek_step1(app_state, &proof).await {
         Ok(response) => {
             // Update state to AwaitingClarifyingAnswers
@@ -88,6 +99,47 @@ pub async fn step1_analyze_proof(
             })
             .await
             .map_err(|e| format!("Failed to update skills: {}", e))?;
+            
+            // Check if proof is perfect (no issues and no questions)
+            if response.issues.is_empty() && response.questions.is_empty() {
+                if let Some(topic) = &problem_topic {
+                    store::update_skills(app_state, |skills| {
+                        skills.update_for_perfect_proof(topic);
+                    })
+                    .await
+                    .map_err(|e| format!("Failed to update skills for perfect proof: {}", e))?;
+                }
+                
+                // Save session record for perfect proof
+                if let (Some(pid), Some(topic)) = (problem_id, problem_topic) {
+                    let skills_after = store::get_skills(app_state).await
+                        .map_err(|e| format!("Failed to get skills: {}", e))?;
+                    let skill_after = skills_after.skills.get(&topic)
+                        .copied()
+                        .unwrap_or(0.5);
+                    
+                    let issues_list: Vec<String> = response.issues.iter()
+                        .map(|i| format!("{}: {}", i.step_id, i.explanation))
+                        .collect();
+                    
+                    let record = SessionRecord {
+                        session_id: format!("sess_{}", Utc::now().timestamp_millis()),
+                        problem_id: pid,
+                        skill: topic,
+                        user_attempt: proof,
+                        issues: issues_list,
+                        eval_summary: "Perfect solution - no issues, no questions".to_string(),
+                        skill_before,
+                        skill_after,
+                        difficulty: problem_difficulty.unwrap_or(0.5),
+                        timestamp: Utc::now().timestamp(),
+                    };
+                    
+                    if let Err(e) = save_session(&record).await {
+                        tracing::warn!(error = %e, "Failed to save session record for perfect proof");
+                    }
+                }
+            }
             
             Ok(response)
         }
@@ -229,31 +281,38 @@ pub async fn get_recommended_problem(
         }
     };
     
-    // FIRST: Try to get a cached problem (fast, no LLM call)
+    // Get list of completed problem IDs to exclude
+    let completed_problem_ids: std::collections::HashSet<String> = {
+        let sessions = load_all_sessions().await.unwrap_or_default();
+        sessions.into_iter().map(|s| s.problem_id).collect()
+    };
+    
+    // FIRST: Try to get a cached problem (fast, no LLM call) - exclude completed ones
     let mut cached = crate::problems::cache::ProblemCache::load_async().await;
     if let Some(pos) = cached.queue.iter()
-        .position(|p| p.topic == weakest_skill) {
+        .position(|p| p.topic == weakest_skill && !completed_problem_ids.contains(&p.id)) {
         let problem = cached.queue.remove(pos);
         // Save updated cache
         let _ = cached.save_async().await;
-        tracing::info!(skill = %weakest_skill, "Using cached problem");
+        tracing::info!(skill = %weakest_skill, problem_id = %problem.id, "Using cached problem (not completed)");
         return Ok(problem);
     }
     
-    // SECOND: Try static problems ONLY in debug mode (gated fallback)
-    // Check for debug flag via environment variable or config
-    let use_static_examples = std::env::var("ZOS_USE_STATIC_EXAMPLES")
-        .unwrap_or_else(|_| "false".to_string())
-        .parse::<bool>()
-        .unwrap_or(false);
+    // SECOND: Try static problems (exclude completed ones) - prefer uncompleted
+    let available_problems: Vec<&Problem> = problems.iter()
+        .filter(|p| !completed_problem_ids.contains(&p.id))
+        .collect();
     
-    if use_static_examples {
-        if let Some(static_problem) = selector::pick_problem(&skills, &problems) {
-            tracing::info!(skill = %weakest_skill, "Using static problem (debug mode)");
-            return Ok(static_problem);
-        }
+    if let Some(static_problem) = selector::pick_problem_from_list(&skills, &available_problems) {
+        tracing::info!(skill = %weakest_skill, problem_id = %static_problem.id, "Using static problem (not completed)");
+        return Ok(static_problem.clone());
     }
-    // Otherwise, skip static problems and proceed to generation
+    
+    // If all problems are completed, allow repeats (fallback)
+    if let Some(static_problem) = selector::pick_problem(&skills, &problems) {
+        tracing::info!(skill = %weakest_skill, problem_id = %static_problem.id, "Using static problem (all completed, allowing repeat)");
+        return Ok(static_problem);
+    }
     
     // THIRD: Try to get a task from the daily plan (may generate, but only if needed)
     if let Some(mut plan) = crate::brain::store::load().await
@@ -315,7 +374,7 @@ pub async fn get_recommended_problem(
     }
     
     // FINAL FALLBACK: Generate a problem with difficulty annealing (slow, LLM call)
-    // Get recent success rate and determine difficulty
+    // Only if no uncompleted problems exist
     let success_rate = recent_success_rate(&weakest_skill, 5).await
         .unwrap_or(0.5);
     
@@ -331,7 +390,7 @@ pub async fn get_recommended_problem(
         success_rate = success_rate,
         base_difficulty = base_difficulty,
         annealed_difficulty = annealed_difficulty,
-        "Generating new problem with difficulty annealing"
+        "Generating new problem with difficulty annealing (all static problems completed)"
     );
     
     // Try to generate a problem with annealed difficulty
@@ -365,6 +424,24 @@ pub fn get_problems_by_topic(topic: String) -> Result<Vec<Problem>, String> {
     }
     
     Ok(filtered)
+}
+
+#[tauri::command]
+pub fn get_problem_by_id(problem_id: String) -> Result<Problem, String> {
+    tracing::info!(problem_id = %problem_id, "Loading problem by ID (no LLM call)");
+    let all_problems = Problem::load_all()
+        .map_err(|e| format!("Failed to load problems: {}", e))?;
+    
+    let problem = all_problems
+        .into_iter()
+        .find(|p| p.id == problem_id)
+        .ok_or_else(|| {
+            tracing::warn!(problem_id = %problem_id, "Problem not found by ID");
+            format!("Problem with ID '{}' not found", problem_id)
+        })?;
+    
+    tracing::info!(problem_id = %problem.id, topic = %problem.topic, "Successfully loaded problem by ID");
+    Ok(problem)
 }
 
 #[tauri::command]

@@ -14,7 +14,7 @@ impl Default for ModelConfig {
     fn default() -> Self {
         ModelConfig {
             proof_model: "deepseek-r1:7b".to_string(),
-            problem_model: "qwen2.5:7b-math".to_string(),
+            problem_model: "qwen2-math:7b".to_string(),
             general_model: "qwen2.5:7b-instruct".to_string(),
         }
     }

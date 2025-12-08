@@ -1,0 +1,8 @@
+{
+  "id": "logical_reasoning_001",
+  "topic": "logical_reasoning",
+  "difficulty": 0.3,
+  "statement": "Prove the following logical statement using direct proof: If n is an even integer, then n^2 is even.",
+  "solution_sketch": "Let n = 2k for some integer k. Then n^2 = (2k)^2 = 4k^2 = 2(2k^2). Since 2k^2 is an integer, n^2 is even by definition."
+}
+

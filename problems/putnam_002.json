@@ -1,0 +1,8 @@
+{
+  "id": "putnam_002",
+  "topic": "putnam_competition",
+  "difficulty": 0.7,
+  "statement": "Prove that there are infinitely many primes of the form 4k + 3.",
+  "solution_sketch": "Assume finitely many primes of form 4k+3: p1, p2, ..., pn. Consider N = 4p1p2...pn - 1. Show N is of form 4k+3 and has a prime factor of form 4k+3, leading to contradiction."
+}
+

@@ -1,0 +1,8 @@
+{
+  "id": "ml_002",
+  "topic": "ml_theory",
+  "difficulty": 0.6,
+  "statement": "Derive the backpropagation algorithm for a two-layer neural network. Show how gradients flow backward through the network.",
+  "solution_sketch": "Start with the chain rule for the loss function. Compute partial derivatives with respect to weights in the output layer, then propagate backward to the hidden layer. Show the recursive relationship for gradient computation."
+}
+

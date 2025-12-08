@@ -1,0 +1,8 @@
+{
+  "id": "rl_002",
+  "topic": "rl_theory",
+  "difficulty": 0.5,
+  "statement": "Prove that value iteration converges to the optimal value function V* for a finite MDP. Show that the Bellman operator is a contraction mapping.",
+  "solution_sketch": "Define the Bellman operator T. Show that T is a contraction mapping with contraction factor γ using the Banach fixed-point theorem. Apply this to show that repeated application of T converges to the unique fixed point V*."
+}
+

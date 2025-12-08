@@ -52,6 +52,60 @@ pub fn pick_problem(skills: &SkillVector, problems: &Vec<Problem>) -> Option<Pro
     }
 }
 
+/// Pick a problem from a list of problems (helper for filtering completed problems)
+pub fn pick_problem_from_list<'a>(skills: &'a SkillVector, problems: &'a Vec<&'a Problem>) -> Option<&'a Problem> {
+    if problems.is_empty() {
+        return None;
+    }
+
+    // Find the weakest skill
+    let weakest = match skills.get_weakest_skill() {
+        Some((skill_name, _)) => skill_name,
+        None => return problems.first().copied(),
+    };
+
+    // Filter problems for the weakest skill and randomly pick from easiest ones
+    use rand::seq::SliceRandom;
+    use rand::thread_rng;
+    
+    let matching_problems: Vec<&Problem> = problems
+        .iter()
+        .filter(|p| p.topic == weakest)
+        .copied()
+        .collect();
+    
+    if !matching_problems.is_empty() {
+        // Find minimum difficulty
+        let min_diff = matching_problems.iter()
+            .map(|p| p.difficulty)
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(0.0);
+        
+        // Filter to easiest problems and randomly pick one
+        let easiest: Vec<&Problem> = matching_problems.iter()
+            .filter(|p| (p.difficulty - min_diff).abs() < f32::EPSILON)
+            .copied()
+            .collect();
+        
+        let mut rng = thread_rng();
+        easiest.choose(&mut rng).copied()
+    } else {
+        // If no problems for weakest skill, randomly pick from easiest overall
+        let min_diff = problems.iter()
+            .map(|p| p.difficulty)
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(0.0);
+        
+        let easiest: Vec<&Problem> = problems.iter()
+            .filter(|p| (p.difficulty - min_diff).abs() < f32::EPSILON)
+            .copied()
+            .collect();
+        
+        let mut rng = thread_rng();
+        easiest.choose(&mut rng).copied()
+    }
+}
+
 pub fn get_problems_by_topic(problems: &Vec<Problem>, topic: &str) -> Vec<Problem> {
     // Filter by exact topic match (case-sensitive, no whitespace)
     let filtered: Vec<Problem> = problems

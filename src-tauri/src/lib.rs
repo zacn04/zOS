@@ -101,6 +101,7 @@ pub fn run() {
             routes::step2_evaluate_answers,
             routes::get_recommended_problem,
             routes::get_problems_by_topic,
+            routes::get_problem_by_id,
             routes::get_skills,
             routes::update_skills_from_issues,
             routes::save_session_record,

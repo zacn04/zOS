@@ -1,0 +1,8 @@
+{
+  "id": "coding_002",
+  "topic": "coding_debugging",
+  "difficulty": 0.4,
+  "statement": "Debug this Rust code that fails to compile:\n\nfn main() {\n    let mut vec = vec![1, 2, 3];\n    let first = &vec[0];\n    vec.push(4);\n    println!(\"{}\", first);\n}\n\nExplain the borrowing rules violation.",
+  "solution_sketch": "The code violates Rust's borrowing rules. We have an immutable borrow (first) and then try to mutate vec (push). Rust prevents this to avoid potential use-after-free. Fix by dropping the borrow before mutation, or restructuring the code."
+}
+

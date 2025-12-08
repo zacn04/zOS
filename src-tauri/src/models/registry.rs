@@ -18,7 +18,7 @@ lazy_static! {
         );
         m.insert(
             config.problem_model.clone(),
-            LocalModel::QwenMath(QwenMathModel::new("qwen2.5:7b-math"))
+            LocalModel::QwenMath(QwenMathModel::new("qwen2-math:7b"))
         );
         m.insert(
             config.general_model.clone(),
@@ -27,7 +27,7 @@ lazy_static! {
         
         // Also register common aliases
         m.insert("deepseek-r1:7b".to_string(), LocalModel::DeepSeek(DeepSeekModel::new("deepseek-r1:7b")));
-        m.insert("qwen2.5:7b-math".to_string(), LocalModel::QwenMath(QwenMathModel::new("qwen2.5:7b-math")));
+        m.insert("qwen2-math:7b".to_string(), LocalModel::QwenMath(QwenMathModel::new("qwen2-math:7bh")));
         m.insert("qwen2.5:7b-instruct".to_string(), LocalModel::QwenInstruct(QwenInstructModel::new("qwen2.5:7b-instruct")));
         
         m

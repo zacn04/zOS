@@ -102,6 +102,21 @@ impl SkillVector {
         }
     }
 
+    /// Reward skills for a perfect proof (no issues, no questions needed)
+    pub fn update_for_perfect_proof(&mut self, skill_topic: &str) {
+        // Reward the specific skill domain for a perfect proof
+        if let Some(skill) = self.skills.get_mut(skill_topic) {
+            *skill = (*skill + 0.02).min(1.0);
+        }
+        // Also reward proof strategy and logical reasoning as secondary skills
+        if let Some(skill) = self.skills.get_mut("proof_strategy") {
+            *skill = (*skill + 0.01).min(1.0);
+        }
+        if let Some(skill) = self.skills.get_mut("logical_reasoning") {
+            *skill = (*skill + 0.01).min(1.0);
+        }
+    }
+
     pub fn get_weakest_skill(&self) -> Option<(String, f32)> {
         use rand::seq::SliceRandom;
         use rand::thread_rng;
