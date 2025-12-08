@@ -1,4 +1,4 @@
-# zOS – Local Learning Assistant
+# **zOS — Local Reasoning Runtime**
 
 ![Rust](https://img.shields.io/badge/Rust-stable-orange)
 ![SvelteKit](https://img.shields.io/badge/SvelteKit-frontend-red)
@@ -7,119 +7,155 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Status: Experimental](https://img.shields.io/badge/status-experimental-yellow)
 
-A Tauri-based desktop application for practicing technical problem-solving with LLM-powered feedback.
-Built with Rust and SvelteKit, running entirely on local Ollama models.
+**zOS** (“Zac’s Operating Space”) is a **local-first agentic reasoning runtime** built with **Rust + Tauri** and powered entirely by **local Ollama LLMs**.
+It provides structured pipelines for **proof analysis, problem solving, algorithmic reasoning**, and other technical workflows—without cloud APIs.
 
-**Status:** Experimental personal project. Proof feedback and LLM problem generation are unstable and may fail or behave inconsistently.
-
----
-
-## What is zOS?
-
-zOS (“Zac’s Operating Space”) is a local-first learning environment for math, ML, algorithms, proofs, and reasoning.
-It is not an operating system; the name refers to a personal workspace for technical practice.
-
-zOS integrates a Rust backend (via Tauri), a SvelteKit frontend, and local LLMs through Ollama to provide:
-
-* Structured problem-solving workflows
-* A simple two-step proof/solution feedback loop
-* Lightweight skill tracking across 10 domains
-* Session history and basic analytics
-* Optional LLM-based problem generation
-
-Everything runs locally; no cloud APIs are used.
+zOS manages **multi-model routing**, **fault-tolerant structured extraction**, **repair loops**, and **task-aware fallback logic**, wrapped in a SvelteKit desktop interface designed for interactive practice and analysis.
 
 ---
 
-## Overview
+# **Why zOS Exists**
 
-zOS provides:
+Modern LLMs are powerful but unstable in structured workflows: they truncate, hallucinate formats, and produce incomplete JSON.
+zOS explores how far a **local, self-contained agent runtime** can stabilize these behaviors using:
 
-* **Proof Feedback (experimental):** Two-step LLM analysis and evaluation of submitted proofs/solutions
-* **Skill Tracking:** A 10-dimensional skill vector with basic incremental updates
-* **Problem Management:** Static JSON problems plus optional LLM-based generation
-* **Session History:** Logs and displays past problem-solving sessions
-* **Daily Planning:** A simple heuristic daily plan based on weakest skills and trends
+* validation & sanitization layers
+* multi-step repair attempts
+* fallback regeneration chains
+* circuit breaking & exponential backoff
+* automatic model selection for different task types
 
-This is an exploratory tool, not a polished tutoring product.
+**The goal of zOS is to provide a practical, local-first environment for technical
+reasoning tasks. The fault-tolerance mechanisms were built out of necessity:
+local LLMs frequently produce truncated or invalid structured output, so zOS
+implements enough routing and repair logic to keep the workflows usable.**
 
----
-
-## Features
-
-### Solve Mode
-
-* Recommends problems based on weakest skills
-* Accepts free-form text solutions/proofs
-* Runs a two-step proof pipeline:
-
-  * Analysis: identifies structure, steps, and issues
-  * Evaluation: follow-up questions and final assessment
-* Updates skills based on detected issues and answer quality
-* Uses static problems only if the `ZOS_USE_STATIC_EXAMPLES=true` environment variable is set
-
-### Learn Mode
-
-* Browses problems by topic (RL Theory, ML Theory, Coding, Algorithms, etc.)
-* Lists all static problems in the `problems/` directory
-* Filters problems by skill domain
-
-### Improve Mode
-
-* Displays current skill levels across 10 domains with progress bars
-* Shows the current daily plan (when generated)
-* Recommends work on weaker areas
-* Can reset all stored skill and history data
-
-### History and Analytics
-
-* Lists all past problem-solving sessions
-* Computes basic analytics:
-
-  * Skill progression over time
-  * Session counts
-  * Average difficulty
-  * Weekly trend indicators
-* Renders charts as static SVGs (non-interactive)
 
 ---
 
-## Technical Architecture
+# **Core Capabilities**
 
-### Backend (Rust)
+### **Agentic Proof Pipeline**
 
-* Tauri-based desktop backend
-* Model router: routes proof, problem, and general tasks to configured Ollama models with basic fallback behavior
-* Proof pipeline:
+Two-pass evaluation using local models:
 
-  * Step 1: solution/proof analysis
-  * Step 2: evaluation with follow-up questions
-* Problem generator: experimental LLM-based JSON generation, fragile due to parsing/formatting issues
-* Skill model: per-domain scalar in `[0.0, 1.0]` with additive increments/decrements
-* Session logging: saves each attempt with metadata and skill deltas
-* Daily plan generator: simple heuristic focused on weakest skills and negative trends
-* Central application state via `AppState` for in-memory caches and filesystem paths
+1. **Analysis pass:** detect structure, steps, logical gaps
+2. **Evaluation pass:** follow-up questions + final assessment
 
-### Frontend (SvelteKit)
+The pipeline includes validation hooks and recovery logic for malformed output.
 
-* SvelteKit SPA routed via Tauri
-* TypeScript for type safety
-* Responsive UI with dark theme support
-* History/Improve views rendering SVG analytics charts
+---
 
-### LLM Models (via Ollama)
+### **Fault-Tolerant Structured Extraction**
 
-Defaults:
+zOS attempts to extract stable structured data from unstable LLM output using:
 
-* `deepseek-r1:7b` — proof/solution analysis and evaluation
-* `qwen2.5:7b-math` — math/technical problem generation (experimental)
-* `qwen2.5:7b-instruct` — general or fallback tasks
+* truncation detection
+* strict + lenient JSON parsing heuristics
+* sanitization and partial-repair rules
+* DeepSeek → Qwen regeneration chains
+* fallback routing for repeated failures
 
-Models are configurable via `models.toml` in the app data directory.
+These components form the backbone of the zOS reasoning runtime.
 
-### Skill Domains
+---
 
-The skill vector tracks 10 areas:
+### **Model Routing Engine**
+
+A small routing layer dispatches tasks to the appropriate local model:
+
+| Task Type          | Default Model         |
+| ------------------ | --------------------- |
+| Proof Analysis     | `deepseek-r1:7b`      |
+| Problem Gen        | `qwen2.5:7b-math`     |
+| General / Fallback | `qwen2.5:7b-instruct` |
+
+The router includes:
+
+* circuit breaker
+* exponential backoff
+* automatic fallback selection
+
+---
+
+### **Skill & Session Engine**
+
+In addition to the agent runtime, zOS tracks:
+
+* a 10-dimensional skill vector (`[0.0, 1.0]` per domain)
+* session history + deltas
+* per-domain trends
+* simple daily plan heuristics
+* static + auto-generated problem pools
+
+These systems exist to support long-term reasoning practice.
+
+---
+
+# **Feature Overview**
+
+### **Solve Mode**
+
+* Suggests problems based on weakest skills
+* Accepts free-form solutions/proofs
+* Runs the analysis → evaluation pipeline
+* Adjusts skills based on detected issues
+* Uses LLM-generated or static problems
+
+### **Learn Mode**
+
+* Browse problems by domain (ML Theory, RL, Algorithms, Debugging, Proof Strategy, etc.)
+* Filters static problems from `problems/`
+
+### **Improve Mode**
+
+* Current skill levels
+* Daily plan (weakest skills + negative trends)
+* Ability to reset all user data
+
+### **History & Analytics**
+
+* Per-session logs
+* Skill trajectories
+* Session counts & difficulty trends
+* Static SVG analysis charts
+
+---
+
+# **Technical Architecture**
+
+## **Backend (Rust, Tauri)**
+
+* Task router w/ fallback, backoff, and circuit breaking
+* Proof pipeline (analysis + evaluation passes)
+* Structured output extraction & repair logic
+* Problem generation with JSON validation
+* Session + skill store (persisted in app data)
+* Daily plan heuristic
+* Central `AppState` for caches and paths
+
+## **Frontend (SvelteKit)**
+
+* Tauri-routed SvelteKit SPA
+* Dark-mode responsive UI
+* History, analytics, and session views
+* SVG-based charts
+
+## **Local LLMs (Ollama)**
+
+Default configuration:
+
+* `deepseek-r1:7b` — analysis & reasoning
+* `qwen2.5:7b-math` — technical/mathy generation
+* `qwen2.5:7b-instruct` — generic tasks / fallback
+
+Configurable via `models.toml`.
+
+---
+
+# **Skill Domains**
+
+The 10-dimensional skill vector tracks:
 
 * RL Theory
 * ML Theory
@@ -127,250 +163,138 @@ The skill vector tracks 10 areas:
 * Coding Debugging
 * Algorithms
 * Production Engineering
-* Analysis and Math
+* Analysis & Math
 * Putnam/Competition
 * Proof Strategy
 * Logical Reasoning
 
 ---
 
-## Prerequisites
+# **Installation**
 
-* Rust (latest stable)
-* Node.js (v18 or later)
+### Requirements
+
+* Rust (stable)
+* Node.js 18+
 * pnpm
-* Ollama with required models pulled and available
+* Ollama
 
-Suggested setup on macOS:
+### Setup
 
-* Install Ollama: `brew install ollama`
-* Pull models:
+```bash
+git clone <repo-url>
+cd personal-os
+pnpm install
+ollama serve
+```
 
-  * `ollama pull deepseek-r1:7b`
-  * `ollama pull qwen2.5:7b-math`
-  * `ollama pull qwen2.5:7b-instruct`
-* Start Ollama: `ollama serve`
+### Development
 
----
+```bash
+pnpm tauri dev     # hot-reload desktop app
+pnpm tauri build   # production bundle
+```
 
-## Installation
+Rust tests:
 
-1. Clone the repository: `git clone <repository-url>`
-2. Enter the project directory: `cd personal-os`
-3. Install dependencies: `pnpm install`
-4. Start Ollama if needed: `ollama serve`
-
----
-
-## Development
-
-Run in development mode:
-
-* `pnpm tauri dev`
-
-This starts the Svelte dev server, builds and runs the Tauri app, and enables hot reload for frontend and backend.
-
-Build a production bundle:
-
-* `pnpm tauri build`
-
-The built application will be under `src-tauri/target/release/bundle/`.
-
-Run tests:
-
-* Rust tests: `cd src-tauri && cargo test`
-* TypeScript/Svelte checks: `pnpm check`
+```bash
+cd src-tauri && cargo test
+```
 
 ---
 
-## Configuration
+# **Configuration**
 
-### Model Configuration
+### Models (`models.toml`)
 
-Models are configured via `models.toml` in the platform-specific app data directory:
-
-* macOS: `~/Library/Application Support/com.zacnwo.zos/models.toml`
-* Windows: `%APPDATA%/com.zacnwo.zos/models.toml`
-* Linux: `~/.local/share/com.zacnwo.zos/models.toml`
-
-Default values:
-
-* `proof_model = "deepseek-r1:7b"`
-* `problem_model = "qwen2.5:7b-math"`
-* `general_model = "qwen2.5:7b-instruct"`
-
-If the file does not exist, defaults are used.
-
-### Environment Variables
-
-* `ZOS_USE_STATIC_EXAMPLES=true`
-
-  * Enables static problems in Solve mode
-  * Without this, Solve mode prefers LLM-based generation, which is experimental and may fail
-  * Learn mode always shows static problems regardless
-
-### Ollama Endpoint
-
-The app expects Ollama at `http://localhost:11434` with the configured models available.
-
----
-
-## Project Structure
-
-`personal-os/`
-
-* `src/` Svelte frontend
-
-  * `routes/`
-
-    * `+page.svelte` Home page
-    * `solve/` Problem solving UI
-    * `learn/` Topic browsing
-    * `improve/` Skills and daily plan
-    * `history/` Sessions and analytics
-* `src-tauri/` Rust backend
-
-  * `problems/` problem loading, selection, generation, cache
-  * `skills/` skill vector and persistent store
-  * `sessions/` session records and history
-  * `brain/` daily plan logic and persistence
-  * `analytics/` metrics computation
-  * `pipelines/` router, proof pipeline, Ollama client, JSON extraction
-  * `models/` model wrappers and registry
-  * `state/` app-level state and caches
-  * `config/` model config loader
-* `problems/` static JSON problem files
-* `package.json`
-
----
-
-## Data Storage
-
-User data is stored in platform-specific application data directories:
+Platform-specific app data directory:
 
 * macOS: `~/Library/Application Support/com.zacnwo.zos/`
-* Windows: `%APPDATA%/com.zacnwo.zos/`
 * Linux: `~/.local/share/com.zacnwo.zos/`
+* Windows: `%APPDATA%/com.zacnwo.zos/`
 
-Files include:
+Example:
 
-* `skills.json` — current skill levels (0.0–1.0 per domain)
-* `data/sessions/*.json` — individual session records
-* `data/daily_plan.json` — daily plan (24-hour validity)
-* `data/problems_cache.json` — prefetched problems (if used)
-* `problems/autogen/*.json` — auto-generated problems (if generation succeeds)
-* `models.toml` — optional model override
+```toml
+proof_model   = "deepseek-r1:7b"
+problem_model = "qwen2.5:7b-math"
+general_model = "qwen2.5:7b-instruct"
+```
 
----
+### Environment
 
-## How It Works
-
-### Problem Flow
-
-When a problem is requested in Solve mode:
-
-1. Check the problem cache (if populated)
-2. Check daily plan tasks
-3. Fall back to LLM-based generation for the weakest skill
-4. Use static problems only if `ZOS_USE_STATIC_EXAMPLES=true` is set
-
-### Solving a Problem
-
-* User submits a written solution/proof
-* Proof pipeline runs:
-
-  * Analysis pass: attempts to identify structure and issues
-  * Evaluation pass: asks questions and provides a final judgment
-* Skill updates are applied:
-
-  * Decreases on detected issues (roughly −0.02 to −0.03 per issue type)
-  * Small increases for correct or mostly correct answers
-  * Values clamped to `[0.0, 1.0]`
-
-### Daily Plan
-
-* Generated on startup if missing or expired
-* Focuses on two weakest skills plus skills with negative trends
-* Passive plan; user still manually requests problems
-* Expires after 24 hours
-
-### Analytics
-
-* Derived from session history
-* Computes skill trajectories, session counts, average difficulty, and simple trends
-* Visualized as static SVG charts
+`ZOS_USE_STATIC_EXAMPLES=true` — bypass LLM problem generation
+Ollama endpoint: `http://localhost:11434`
 
 ---
 
-## Known Limitations
+# **Data Storage**
 
-1. LLM-based problem generation is fragile and frequently fails due to JSON/formatting errors.
-2. Solve mode uses static problems only when `ZOS_USE_STATIC_EXAMPLES=true` is set.
-3. Runtime behavior depends on Ollama stability and available system RAM.
-4. Problem cache prefetching is implemented but not wired into a background worker.
-5. The skill update rule is simplistic and hand-tuned, not statistically grounded.
-6. Analytics are basic and non-interactive.
+Stored under the platform’s app data directory:
 
----
-
-## Usage
-
-Basic workflow:
-
-1. Start Ollama, then launch zOS.
-2. Use Solve mode to request a recommended problem.
-3. Submit your solution, read feedback, and answer follow-up questions if prompted.
-4. Use Improve mode to review skill levels and the daily plan.
-5. Use History mode to review sessions and trends.
-
-If problem generation fails repeatedly, set `ZOS_USE_STATIC_EXAMPLES=true` and rely on static problems.
+* `skills.json` — skill vector
+* `data/sessions/*.json` — session logs
+* `data/daily_plan.json`
+* `problems_cache.json`
+* `models.toml`
+* `problems/autogen/*.json`
 
 ---
 
-## Troubleshooting
+# **How the System Works**
 
-“No problems available”
+### **Problem Flow**
 
-* Set `ZOS_USE_STATIC_EXAMPLES=true`.
-* Ensure Ollama is running with `ollama serve`.
-* Verify models with `ollama list`.
-* Confirm JSON problem files exist in `problems/`.
+1. Try cache
+2. Try daily plan
+3. Try LLM generation (default)
+4. Fallback to static problems if enabled
 
-“Model error” when analyzing proofs
+### **Proof Pipeline**
 
-* Ensure Ollama is reachable at `http://localhost:11434`.
-* Confirm required models are pulled.
-* Check Tauri/Rust logs for raw LLM output.
+1. User submits solution
+2. Analysis pass (structure, gaps)
+3. Evaluation pass (follow-ups + verdict)
+4. Skill updates applied
 
-Problems not generating
+### **Daily Plan**
 
-* Expected sometimes; generator is experimental.
-* Prefer static problems via `ZOS_USE_STATIC_EXAMPLES=true`.
-* Check Ollama logs for out-of-memory or model failures.
+* Generated automatically every 24 hours
+* Targets weakest or regressing skills
 
-JSON extraction errors
+### **Analytics**
 
-* Inspect raw responses in logs.
-* Try switching models via `models.toml`.
-* Failures are normal at this stage.
-
----
-
-## Contributing
-
-This is a personal project, but suggestions, issues, and small contributions are welcome.
+* Skill trajectories
+* Session trends
+* Difficulty over time
 
 ---
 
-## License
+# **Known Limitations**
+
+* LLM problem generation frequently fails due to JSON instability
+* Static fallback recommended for reliable use
+* Reasoning quality varies with local models and hardware
+* No background prefetch worker yet
+* Skill model is simplistic
+
+---
+
+# **Usage**
+
+1. Start Ollama
+2. Launch zOS
+3. Select *Solve*, *Learn*, *Improve*, or *History*
+4. Submit proofs/solutions and iterate through feedback loops
+5. Review analytics over time
+
+---
+
+# **License**
 
 MIT
 
----
+# **Acknowledgments**
 
-## Acknowledgments
+Tauri, SvelteKit, Ollama, DeepSeek-R1, Qwen Math, Qwen Instruct
 
-* Tauri
-* SvelteKit
-* Ollama
-* DeepSeek-R1, Qwen Math, Qwen Instruct
