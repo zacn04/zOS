@@ -144,12 +144,6 @@
       >
         Learn
       </button>
-      <button
-        onclick={() => goto("/history")}
-        style="padding: 8px 16px; background-color: #757575; color: white; border: none; border-radius: 4px; cursor: pointer;"
-      >
-        History
-      </button>
     </div>
   </div>
 

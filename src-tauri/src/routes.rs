@@ -6,7 +6,6 @@ use crate::skills::{model::SkillVector, store as skills_store};
 use crate::memory::store;
 use crate::sessions::{SessionRecord, save_session, load_all_sessions, recent_success_rate};
 use crate::brain::TaskDirective;
-use crate::analytics::{AnalyticsPayload, compute_analytics};
 use crate::state::session::{get_state, set_state, reset_state, log_state, ProofState};
 use crate::state::app::AppState;
 use chrono::Utc;
@@ -34,7 +33,7 @@ pub async fn run_proof_pipeline(
     state: State<'_, std::sync::Arc<AppState>>,
     proof: String,
 ) -> Result<Step1Response, String> {
-    call_deepseek_step1(state.inner(), &proof)
+    call_deepseek_step1(state.inner(), &proof, None)
         .await
         .map_err(|e| e.to_string())
 }
@@ -48,7 +47,9 @@ pub async fn run_proof_followup(
     user_answers: String,
 ) -> Result<Step2Response, String> {
     let app_state = state.inner();
-    match call_deepseek_step2(app_state, &original_proof, &issues_json, &questions, &user_answers).await {
+    // Legacy function - problem statement not available, use placeholder
+    let problem_statement = "Problem statement not available in legacy API";
+    match call_deepseek_step2(app_state, problem_statement, &original_proof, &issues_json, &questions, &user_answers).await {
         Ok(response) => Ok(response),
         Err(e) => Err(format!("Model error: {}", e)),
     }
@@ -85,7 +86,17 @@ pub async fn step1_analyze_proof(
         .copied()
         .unwrap_or(0.5);
     
-    match call_deepseek_step1(app_state, &proof).await {
+    // Get problem statement if we have a problem_id
+    let problem_statement = if let Some(pid) = &problem_id {
+        match get_problem_by_id(pid.clone()) {
+            Ok(problem) => Some(problem.statement),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+    
+    match call_deepseek_step1(app_state, &proof, problem_statement.as_deref()).await {
         Ok(response) => {
             // Update state to AwaitingClarifyingAnswers
             set_state(app_state, ProofState::AwaitingClarifyingAnswers {
@@ -184,6 +195,17 @@ pub async fn step2_evaluate_answers(
     let answers_json = serde_json::to_string(&answers)
         .map_err(|e| format!("Failed to serialize answers: {}", e))?;
 
+    // Get problem statement for context (if problem_id is available)
+    let problem_statement = if let Some(pid) = &problem_id {
+        Problem::load_all()
+            .ok()
+            .and_then(|problems| problems.into_iter().find(|p| p.id == *pid))
+            .map(|p| p.statement)
+            .unwrap_or_else(|| "Problem statement not available".to_string())
+    } else {
+        "Problem statement not available".to_string()
+    };
+
     // Get skill before update
     let skills_before = store::get_skills(app_state).await
         .map_err(|e| format!("Failed to get skills: {}", e))?;
@@ -192,7 +214,7 @@ pub async fn step2_evaluate_answers(
         .copied()
         .unwrap_or(0.5);
 
-    match call_deepseek_step2(app_state, &proof, &issues_json, &questions_json, &answers_json).await {
+    match call_deepseek_step2(app_state, &problem_statement, &proof, &issues_json, &questions_json, &answers_json).await {
         Ok(response) => {
             // Update state to AwaitingRevision
             set_state(app_state, ProofState::AwaitingRevision {
@@ -254,15 +276,10 @@ pub async fn step2_evaluate_answers(
     }
 }
 
-#[tauri::command]
-pub async fn get_recommended_problem(
-    state: State<'_, std::sync::Arc<AppState>>,
+/// Internal helper function to select a problem (extracted for reuse)
+async fn select_problem_internal(
+    app_state: &AppState,
 ) -> Result<Problem, String> {
-    let app_state = state.inner();
-    // Reset state when getting a new problem (user explicitly requested a new problem)
-    reset_state(app_state);
-    log_state(app_state);
-    
     let skills = store::get_skills(app_state).await
         .map_err(|e| format!("Failed to get skills: {}", e))?;
     let problems = Problem::load_all()
@@ -284,33 +301,90 @@ pub async fn get_recommended_problem(
     // Get list of completed problem IDs to exclude
     let completed_problem_ids: std::collections::HashSet<String> = {
         let sessions = load_all_sessions().await.unwrap_or_default();
-        sessions.into_iter().map(|s| s.problem_id).collect()
+        sessions.iter().map(|s| s.problem_id.clone()).collect()
     };
     
-    // FIRST: Try to get a cached problem (fast, no LLM call) - exclude completed ones
+    // Get recently used problem IDs (last 3 problems from sessions) to avoid immediate repeats
+    let session_recently_used: std::collections::HashSet<String> = {
+        let mut sessions = load_all_sessions().await.unwrap_or_default();
+        // Sort by timestamp descending (most recent first)
+        sessions.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        // Take last 3 problems
+        sessions.into_iter()
+            .take(3)
+            .map(|s| s.problem_id)
+            .collect()
+    };
+    
+    // Get in-memory recently selected problems (to avoid immediate repeats even without sessions)
+    let in_memory_recently_selected: std::collections::HashSet<String> = {
+        app_state.get_recently_selected_problems().into_iter().collect()
+    };
+    
+    // Combine both sources for comprehensive recently used tracking
+    let mut recently_used_problem_ids = session_recently_used;
+    recently_used_problem_ids.extend(in_memory_recently_selected);
+    
+    // FIRST: Try to get a cached problem (fast, no LLM call) - exclude completed and recently used ones
     let mut cached = crate::problems::cache::ProblemCache::load_async().await;
     if let Some(pos) = cached.queue.iter()
-        .position(|p| p.topic == weakest_skill && !completed_problem_ids.contains(&p.id)) {
+        .position(|p| p.topic == weakest_skill 
+            && !completed_problem_ids.contains(&p.id)
+            && !recently_used_problem_ids.contains(&p.id)) {
         let problem = cached.queue.remove(pos);
         // Save updated cache
         let _ = cached.save_async().await;
-        tracing::info!(skill = %weakest_skill, problem_id = %problem.id, "Using cached problem (not completed)");
+        tracing::info!(skill = %weakest_skill, problem_id = %problem.id, "Using cached problem (not completed, not recently used)");
+        app_state.record_problem_selected(problem.id.clone());
         return Ok(problem);
     }
     
-    // SECOND: Try static problems (exclude completed ones) - prefer uncompleted
+    // SECOND: Try static problems (exclude completed and recently used ones) - prefer uncompleted and not recently used
     let available_problems: Vec<&Problem> = problems.iter()
-        .filter(|p| !completed_problem_ids.contains(&p.id))
+        .filter(|p| !completed_problem_ids.contains(&p.id)
+            && !recently_used_problem_ids.contains(&p.id))
         .collect();
     
     if let Some(static_problem) = selector::pick_problem_from_list(&skills, &available_problems) {
-        tracing::info!(skill = %weakest_skill, problem_id = %static_problem.id, "Using static problem (not completed)");
+        tracing::info!(skill = %weakest_skill, problem_id = %static_problem.id, "Using static problem (not completed, not recently used)");
+        app_state.record_problem_selected(static_problem.id.clone());
         return Ok(static_problem.clone());
     }
     
-    // If all problems are completed, allow repeats (fallback)
+    // If all uncompleted problems are recently used, try to pick from other skills for variety
+    // This adds variety when the same skill keeps getting selected
+    let available_other_skill_problems: Vec<&Problem> = problems.iter()
+        .filter(|p| !completed_problem_ids.contains(&p.id)
+            && !recently_used_problem_ids.contains(&p.id)
+            && p.topic != weakest_skill)
+        .collect();
+    
+    if !available_other_skill_problems.is_empty() {
+        use rand::seq::SliceRandom;
+        use rand::thread_rng;
+        let mut rng = thread_rng();
+        if let Some(problem) = available_other_skill_problems.choose(&mut rng) {
+            tracing::info!(skill = %weakest_skill, selected_skill = %problem.topic, problem_id = %problem.id, "Using problem from different skill for variety");
+            app_state.record_problem_selected(problem.id.clone());
+            return Ok((*problem).clone());
+        }
+    }
+    
+    // If all problems are completed, allow repeats but still avoid recently used
+    let repeatable_problems: Vec<&Problem> = problems.iter()
+        .filter(|p| !recently_used_problem_ids.contains(&p.id))
+        .collect();
+    
+    if let Some(static_problem) = selector::pick_problem_from_list(&skills, &repeatable_problems) {
+        tracing::info!(skill = %weakest_skill, problem_id = %static_problem.id, "Using static problem (all completed, avoiding recently used)");
+        app_state.record_problem_selected(static_problem.id.clone());
+        return Ok(static_problem.clone());
+    }
+    
+    // Final fallback: allow any problem (including recently used) if nothing else available
     if let Some(static_problem) = selector::pick_problem(&skills, &problems) {
-        tracing::info!(skill = %weakest_skill, problem_id = %static_problem.id, "Using static problem (all completed, allowing repeat)");
+        tracing::info!(skill = %weakest_skill, problem_id = %static_problem.id, "Using static problem (final fallback, may be recently used)");
+        app_state.record_problem_selected(static_problem.id.clone());
         return Ok(static_problem);
     }
     
@@ -343,7 +417,10 @@ pub async fn get_recommended_problem(
                     
                     // Generate a new problem for this skill with annealed difficulty
                     match generator::generate_problem(app_state, &skill, annealed_difficulty).await {
-                        Ok(problem) => return Ok(problem),
+                        Ok(problem) => {
+                            app_state.record_problem_selected(problem.id.clone());
+                            return Ok(problem);
+                        },
                         Err(e) => {
                             tracing::warn!(skill = %skill, error = %e, "Failed to generate problem");
                             // Fall through to final fallback
@@ -363,6 +440,7 @@ pub async fn get_recommended_problem(
                         if let Ok(all_problems) = Problem::load_all() {
                             if let Some(problem) = all_problems.into_iter()
                                 .find(|p| p.id == fail.problem_id) {
+                                app_state.record_problem_selected(problem.id.clone());
                                 return Ok(problem);
                             }
                         }
@@ -395,12 +473,166 @@ pub async fn get_recommended_problem(
     
     // Try to generate a problem with annealed difficulty
     match generator::generate_problem(app_state, &weakest_skill, annealed_difficulty).await {
-        Ok(problem) => Ok(problem),
+        Ok(problem) => {
+            app_state.record_problem_selected(problem.id.clone());
+            Ok(problem)
+        },
         Err(e) => {
             tracing::warn!(skill = %weakest_skill, error = %e, "Failed to generate problem");
             Err(format!("No problems available and generation failed: {}", e))
         }
     }
+}
+
+#[tauri::command]
+pub async fn get_recommended_problem(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<Problem, String> {
+    let app_state = state.inner();
+    // Reset state when getting a new problem (user explicitly requested a new problem)
+    reset_state(app_state);
+    log_state(app_state);
+    // First, check if we have a precomputed problem ready
+    // Try to get one matching the expected difficulty (if we can determine it)
+    let skills = store::get_skills(app_state).await
+        .map_err(|e| format!("Failed to get skills: {}", e))?;
+    let expected_difficulty = skills.get_weakest_skill()
+        .and_then(|(skill, _)| skills.skills.get(&skill).copied())
+        .map(|skill_val| (0.3_f32).max(1.0 - skill_val));
+    
+    if let Some(precomputed) = app_state.take_precomputed_problem(expected_difficulty) {
+        tracing::info!(problem_id = %precomputed.id, difficulty = precomputed.difficulty, "Using precomputed problem");
+        app_state.record_problem_selected(precomputed.id.clone());
+        
+        // Trigger precomputation of next problems in background (don't await)
+        let app_state_clone = app_state.clone();
+        tokio::spawn(async move {
+            if let Err(e) = precompute_next_problems_internal(&app_state_clone, precomputed.difficulty).await {
+                tracing::warn!(error = %e, "Failed to precompute next problems");
+            }
+        });
+        
+        return Ok(precomputed);
+    }
+    
+    // No precomputed problem available, compute it now
+    let problem = select_problem_internal(app_state).await?;
+    let problem_difficulty = problem.difficulty;
+    
+    // Trigger precomputation of next problems in background (don't await)
+    let app_state_clone = app_state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = precompute_next_problems_internal(&app_state_clone, problem_difficulty).await {
+            tracing::warn!(error = %e, "Failed to precompute next problems");
+        }
+    });
+    
+    Ok(problem)
+}
+
+/// Internal function to precompute the next problems (easier, same, harder) in parallel
+async fn precompute_next_problems_internal(
+    app_state: &AppState,
+    base_difficulty: f32,
+) -> Result<(), String> {
+    let skills = store::get_skills(app_state).await
+        .map_err(|e| format!("Failed to get skills: {}", e))?;
+    let weakest_skill = match skills.get_weakest_skill() {
+        Some((skill_name, _)) => skill_name,
+        None => {
+            // If no skill found, try to generate for first available skill
+            if let Some((skill, _)) = skills.skills.iter().next() {
+                skill.clone()
+            } else {
+                return Err("No skills available for precomputation".to_string());
+            }
+        }
+    };
+    
+    // Calculate difficulty variants
+    let easier_diff = (base_difficulty - 0.2).max(0.1);
+    let harder_diff = (base_difficulty + 0.2).min(1.0);
+    
+    // Spawn 3 parallel tasks to generate problems with different difficulties
+    // Each will use different models (via router fallback) to avoid bottlenecking
+    let app_state_clone1 = app_state.clone();
+    let app_state_clone2 = app_state.clone();
+    let app_state_clone3 = app_state.clone();
+    let skill_clone1 = weakest_skill.clone();
+    let skill_clone2 = weakest_skill.clone();
+    let skill_clone3 = weakest_skill.clone();
+    
+    let handle1 = tokio::spawn(async move {
+        generator::generate_problem(&app_state_clone1, &skill_clone1, easier_diff).await
+    });
+    
+    let handle2 = tokio::spawn(async move {
+        generator::generate_problem(&app_state_clone2, &skill_clone2, base_difficulty).await
+    });
+    
+    let handle3 = tokio::spawn(async move {
+        generator::generate_problem(&app_state_clone3, &skill_clone3, harder_diff).await
+    });
+    
+    // Wait for all to complete and collect results
+    let (result1, result2, result3) = tokio::join!(handle1, handle2, handle3);
+    
+    let mut success_count = 0;
+    
+    // Add successful generations to precomputed problems
+    match result1 {
+        Ok(Ok(problem)) => {
+            app_state.add_precomputed_problem(problem);
+            tracing::info!(difficulty = easier_diff, "Precomputed easier problem");
+            success_count += 1;
+        },
+        Ok(Err(e)) => tracing::warn!(error = %e, "Failed to generate easier problem"),
+        Err(e) => tracing::warn!(error = %e, "Task panicked for easier problem"),
+    }
+    
+    match result2 {
+        Ok(Ok(problem)) => {
+            app_state.add_precomputed_problem(problem);
+            tracing::info!(difficulty = base_difficulty, "Precomputed same difficulty problem");
+            success_count += 1;
+        },
+        Ok(Err(e)) => tracing::warn!(error = %e, "Failed to generate same difficulty problem"),
+        Err(e) => tracing::warn!(error = %e, "Task panicked for same difficulty problem"),
+    }
+    
+    match result3 {
+        Ok(Ok(problem)) => {
+            app_state.add_precomputed_problem(problem);
+            tracing::info!(difficulty = harder_diff, "Precomputed harder problem");
+            success_count += 1;
+        },
+        Ok(Err(e)) => tracing::warn!(error = %e, "Failed to generate harder problem"),
+        Err(e) => tracing::warn!(error = %e, "Task panicked for harder problem"),
+    }
+    
+    // Return success if at least one succeeded
+    if success_count > 0 {
+        Ok(())
+    } else {
+        Err("All precomputation attempts failed".to_string())
+    }
+}
+
+/// Command to manually trigger precomputation (called from frontend when problem is loaded)
+#[tauri::command]
+pub async fn precompute_next_problem(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<(), String> {
+    let app_state = state.inner();
+    // Get current problem difficulty if available, otherwise use default
+    let skills = store::get_skills(app_state).await
+        .map_err(|e| format!("Failed to get skills: {}", e))?;
+    let base_difficulty = skills.get_weakest_skill()
+        .and_then(|(skill, _)| skills.skills.get(&skill).copied())
+        .map(|skill_val| (0.3_f32).max(1.0 - skill_val))
+        .unwrap_or(0.5);
+    
+    precompute_next_problems_internal(app_state, base_difficulty).await
 }
 
 #[tauri::command]
@@ -476,12 +708,6 @@ pub async fn save_session_record(record: SessionRecord) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn get_session_history() -> Result<Vec<SessionRecord>, String> {
-    load_all_sessions().await
-        .map_err(|e| format!("Failed to load sessions: {}", e))
-}
-
-#[tauri::command]
 pub async fn get_recent_failures(limit: usize) -> Result<Vec<SessionRecord>, String> {
     let mut all = load_all_sessions().await
         .map_err(|e| format!("Failed to load sessions: {}", e))?;
@@ -527,9 +753,44 @@ pub async fn get_daily_plan() -> Result<crate::brain::CurriculumPlan, String> {
         .ok_or("No plan".into())
 }
 
+/// Submit/abandon a problem attempt (for tracking when user moves on without completing)
 #[tauri::command]
-pub async fn get_analytics_data() -> Result<AnalyticsPayload, String> {
-    Ok(compute_analytics().await)
+pub async fn submit_problem_attempt(
+    state: State<'_, std::sync::Arc<AppState>>,
+    problem_id: Option<String>,
+    problem_topic: Option<String>,
+    problem_difficulty: Option<f32>,
+    user_attempt: String,
+    status: String, // "abandoned", "incomplete", "perfect", etc.
+) -> Result<(), String> {
+    let app_state = state.inner();
+    
+    // Only save if we have problem info
+    if let (Some(pid), Some(topic)) = (problem_id, problem_topic) {
+        let skills = store::get_skills(app_state).await
+            .map_err(|e| format!("Failed to get skills: {}", e))?;
+        let skill_before = skills.skills.get(&topic).copied().unwrap_or(0.5);
+        let skill_after = skill_before; // No change if abandoned/incomplete
+        
+        let record = SessionRecord {
+            session_id: format!("sess_{}", Utc::now().timestamp_millis()),
+            problem_id: pid,
+            skill: topic,
+            user_attempt,
+            issues: vec![],
+            eval_summary: format!("Attempt {} - user moved on", status),
+            skill_before,
+            skill_after,
+            difficulty: problem_difficulty.unwrap_or(0.5),
+            timestamp: Utc::now().timestamp(),
+        };
+        
+        if let Err(e) = save_session(&record).await {
+            tracing::warn!(error = %e, "Failed to save problem attempt record");
+        }
+    }
+    
+    Ok(())
 }
 
 #[tauri::command]

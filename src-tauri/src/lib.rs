@@ -100,18 +100,18 @@ pub fn run() {
             routes::step1_analyze_proof,
             routes::step2_evaluate_answers,
             routes::get_recommended_problem,
+            routes::precompute_next_problem,
             routes::get_problems_by_topic,
             routes::get_problem_by_id,
             routes::get_skills,
             routes::update_skills_from_issues,
             routes::save_session_record,
-            routes::get_session_history,
             routes::get_recent_failures,
             routes::get_skill_drift,
             routes::fetch_cached_problem,
             routes::refresh_daily_plan,
             routes::get_daily_plan,
-            routes::get_analytics_data
+            routes::submit_problem_attempt
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

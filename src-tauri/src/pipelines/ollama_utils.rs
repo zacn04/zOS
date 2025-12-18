@@ -256,6 +256,45 @@ pub fn extract_json(text: &str) -> anyhow::Result<String> {
         return Ok(trimmed.to_string());
     }
     
+    // Strategy 0.1: Handle case where there's explanatory text before JSON
+    // Find the first { that starts a valid JSON object (not just any { in the text)
+    if let Some(first_brace) = trimmed.find('{') {
+        // Try to extract JSON starting from this brace
+        let mut brace_count = 0;
+        let mut in_string = false;
+        let mut escape_next = false;
+        let mut json_end = None;
+        
+        for (i, ch) in trimmed[first_brace..].char_indices() {
+            if escape_next {
+                escape_next = false;
+                continue;
+            }
+            
+            match ch {
+                '\\' if in_string => escape_next = true,
+                '"' => in_string = !in_string,
+                '{' if !in_string => brace_count += 1,
+                '}' if !in_string => {
+                    brace_count -= 1;
+                    if brace_count == 0 {
+                        json_end = Some(first_brace + i + 1);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        if let Some(end) = json_end {
+            let candidate = &trimmed[first_brace..end];
+            if let Ok(_) = serde_json::from_str::<serde_json::Value>(candidate) {
+                tracing::debug!("Strategy 0.1: Successfully extracted JSON after explanatory text");
+                return Ok(candidate.to_string());
+            }
+        }
+    }
+    
     // Strategy 0.25: Extract from markdown code block if present (common with DeepSeek)
     if trimmed.starts_with("```json") || trimmed.starts_with("```") {
         if let Some(code_block_start) = trimmed.find("```") {

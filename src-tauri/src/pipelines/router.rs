@@ -338,12 +338,13 @@ async fn try_model_with_retry<T: serde::de::DeserializeOwned>(
         
         let latency_ms = attempt_start.elapsed().as_millis() as u64;
         
-        // Max-latency watchdog: if > 30s, treat as truncation
-        if latency_ms > 30000 {
+        // Max-latency watchdog: if > 60s, treat as truncation
+        // Allows time for detailed proofs that may take longer to parse
+        if latency_ms > 60000 {
             tracing::warn!(
                 model = model_name,
                 latency_ms = latency_ms,
-                "Latency exceeded 30s, treating as truncation"
+                "Latency exceeded 60s, treating as truncation"
             );
             return Err((ZosError::new(
                 format!("Model '{}' response took {}ms (truncation suspected)", model_name, latency_ms),

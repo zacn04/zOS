@@ -57,6 +57,7 @@
 
   function startProblem(problem: Problem) {
     // Navigate to solve page with problem context
+    // console.log("selected problem:", problem.id);
     goto(`/solve?problem=${problem.id}`);
   }
 </script>
@@ -76,12 +77,6 @@
         style="padding: 8px 16px; background-color: #757575; color: white; border: none; border-radius: 4px; cursor: pointer;"
       >
         Improve
-      </button>
-      <button
-        on:click={() => goto("/history")}
-        style="padding: 8px 16px; background-color: #757575; color: white; border: none; border-radius: 4px; cursor: pointer;"
-      >
-        History
       </button>
     </div>
   </div>
@@ -135,7 +130,7 @@
               on:click={() => startProblem(problem)}
               style="padding: 6px 12px; background-color: #396cd8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;"
             >
-              Start Problem
+              Start Problem 
             </button>
           </div>
         {/each}

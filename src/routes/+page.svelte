@@ -26,12 +26,6 @@
       <h2 class="portal-title">Improve</h2>
       <p class="portal-description">View your skills, track progress, and get personalized coaching</p>
     </button>
-
-    <button class="portal-card portal-history" on:click={() => goto("/history")}>
-      <div class="portal-icon">📊</div>
-      <h2 class="portal-title">History</h2>
-      <p class="portal-description">Review your past sessions and learning journey</p>
-    </button>
   </div>
 </div>
 
@@ -51,7 +45,7 @@
     align-items: center;
     justify-content: center;
     padding: 40px 20px;
-    max-width: 1200px;
+    width: 100%;
     margin: 0 auto;
   }
 
@@ -78,17 +72,17 @@
 
   .portals-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 24px;
     width: 100%;
-    max-width: 900px;
+    padding: 0 20px;
   }
 
   .portal-card {
     background: white;
     border: none;
     border-radius: 16px;
-    padding: 32px 24px;
+    padding: 2vw 1.5vw;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -96,7 +90,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
+    justify-content: center;
+    gap: 1vw;
+    min-height: 120px;
+    width: 100%;
   }
 
   .portal-card:hover {
@@ -109,22 +106,22 @@
   }
 
   .portal-icon {
-    font-size: 48px;
-    margin-bottom: 8px;
+    font-size: clamp(28px, 3vw, 48px);
+    margin-bottom: 4px;
   }
 
   .portal-title {
-    font-size: 28px;
+    font-size: clamp(18px, 2vw, 28px);
     font-weight: 600;
     margin: 0;
     color: #1a1a1a;
   }
 
   .portal-description {
-    font-size: 14px;
+    font-size: clamp(11px, 1.2vw, 14px);
     color: #666;
     margin: 0;
-    line-height: 1.5;
+    line-height: 1.4;
   }
 
   .portal-solve {
@@ -169,20 +166,6 @@
     opacity: 0.9;
   }
 
-  .portal-history {
-    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-    color: white;
-  }
-
-  .portal-history .portal-title,
-  .portal-history .portal-description {
-    color: white;
-  }
-
-  .portal-history .portal-description {
-    opacity: 0.9;
-  }
-
   /* Dark mode */
   @media (prefers-color-scheme: dark) {
     :global(body) {
@@ -193,15 +176,15 @@
       background: #2d2d2d;
     }
 
-    .portal-card:not(.portal-solve):not(.portal-learn):not(.portal-improve):not(.portal-history) {
+    .portal-card:not(.portal-solve):not(.portal-learn):not(.portal-improve) {
       background: #2d2d2d;
     }
 
-    .portal-card:not(.portal-solve):not(.portal-learn):not(.portal-improve):not(.portal-history) .portal-title {
+    .portal-card:not(.portal-solve):not(.portal-learn):not(.portal-improve) .portal-title {
       color: #e0e0e0;
     }
 
-    .portal-card:not(.portal-solve):not(.portal-learn):not(.portal-improve):not(.portal-history) .portal-description {
+    .portal-card:not(.portal-solve):not(.portal-learn):not(.portal-improve) .portal-description {
       color: #b0b0b0;
     }
   }
@@ -223,6 +206,7 @@
 
     .portal-card {
       padding: 24px 20px;
+      min-height: 180px;
     }
 
     .portal-icon {
@@ -231,6 +215,10 @@
 
     .portal-title {
       font-size: 24px;
+    }
+
+    .portal-description {
+      font-size: 14px;
     }
   }
 </style>

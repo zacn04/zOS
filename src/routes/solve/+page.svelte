@@ -2,8 +2,6 @@
   import { invoke } from "@tauri-apps/api/core";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { onMount } from "svelte";
-  import { get } from "svelte/store";
 
   type Problem = {
     id: string;
@@ -65,6 +63,11 @@
       step1Result = null;
       answers = [];
       step2Result = null;
+      
+      // Trigger precomputation of next problem in background (don't await)
+      invoke("precompute_next_problem").catch(err => {
+        console.warn("Failed to precompute next problem:", err);
+      });
     } catch (err) {
       error = String(err);
     } finally {
@@ -97,8 +100,22 @@
     }
   }
 
-  function proceedToAnswers() {
+  async function proceedToAnswers() {
     if (step1Result && step1Result.questions.length > 0) {
+      // Save attempt when proceeding to answer questions (counts as submission)
+      if (currentProblem && proof.trim()) {
+        try {
+          await invoke("submit_problem_attempt", {
+            problem_id: currentProblem.id,
+            problem_topic: currentProblem.topic,
+            problem_difficulty: currentProblem.difficulty,
+            user_attempt: proof,
+            status: "answering_questions"
+          });
+        } catch (err) {
+          console.warn("Failed to save attempt when proceeding to questions:", err);
+        }
+      }
       step = 2;
     }
   }
@@ -135,8 +152,50 @@
     }
   }
 
-  function startNewProblem() {
+  async function startNewProblem() {
+    // Save current attempt if we have one that hasn't been saved yet
+    // (Perfect solutions and step2 already save records, so we only save if user is abandoning)
+    if (currentProblem && proof.trim()) {
+      // Only save if we haven't already saved (step1Result with perfect solution or step2Result already saved)
+      const alreadySaved = (step1Result && step1Result.issues.length === 0 && step1Result.questions.length === 0) || step2Result;
+      if (!alreadySaved) {
+        try {
+          await invoke("submit_problem_attempt", {
+            problem_id: currentProblem.id,
+            problem_topic: currentProblem.topic,
+            problem_difficulty: currentProblem.difficulty,
+            user_attempt: proof,
+            status: "abandoned"
+          });
+        } catch (err) {
+          console.warn("Failed to save abandoned attempt:", err);
+        }
+      }
+    }
     getRecommendedProblem();
+  }
+
+  async function tryAnotherSolution() {
+    // Save current attempt before trying again
+    if (currentProblem && proof.trim()) {
+      try {
+        await invoke("submit_problem_attempt", {
+          problem_id: currentProblem.id,
+          problem_topic: currentProblem.topic,
+          problem_difficulty: currentProblem.difficulty,
+          user_attempt: proof,
+          status: "retrying"
+        });
+      } catch (err) {
+        console.warn("Failed to save attempt before retry:", err);
+      }
+    }
+    // Reset to step 0 to try again
+    step = 0;
+    proof = "";
+    step1Result = null;
+    answers = [];
+    step2Result = null;
   }
 
   function getRoleClass(role: string): string {
@@ -167,34 +226,49 @@
     return colors[assessment] || "#9e9e9e";
   }
 
-  // Load problem on mount
-  onMount(() => {
-    // Check if a problem ID was passed via URL query parameter
-    const problemId = get(page).url.searchParams.get("problem");
-    
-    if (problemId) {
-      // Load the specific problem by ID (no LLM call)
-      loading = true;
-      invoke<Problem>("get_problem_by_id", { problem_id: problemId })
-        .then((problem) => {
-          currentProblem = problem;
-          proof = "";
-          step = 0;
-          step1Result = null;
-          answers = [];
-          step2Result = null;
-          loading = false;
-          // Clear the query parameter from URL
-          goto("/solve", { replaceState: true });
-        })
-        .catch((err) => {
-          error = String(err);
-          loading = false;
-          // Fall back to recommended problem if loading by ID fails
-          getRecommendedProblem();
-        });
-    } else {
-      // No specific problem requested, get a recommended one
+  // Function to load problem by ID
+  async function loadProblemById(problemId: string) {
+    if (loading) return; // Prevent concurrent loads
+    loading = true;
+    error = "";
+    try {
+      const problem = await invoke<Problem>("get_problem_by_id", { problemId: problemId });
+      currentProblem = problem;
+      proof = "";
+      step = 0;
+      step1Result = null;
+      answers = [];
+      step2Result = null;
+      loading = false;
+      
+      // Trigger precomputation of next problem in background (don't await)
+      invoke("precompute_next_problem").catch(err => {
+        console.warn("Failed to precompute next problem:", err);
+      });
+    } catch (err) {
+      
+      error = String(err);
+      loading = false;
+      // Fall back to recommended problem if loading by ID fails
+      getRecommendedProblem();
+    }
+  }
+
+  // Watch for URL changes reactively
+  $effect(() => {
+    const problemId = $page.url.searchParams.get("problem");
+    // console.log("current problem", currentProblem?.id);
+    // console.log("propagated problem", problemId);
+    if (currentProblem?.id === undefined && problemId) {
+      // console.log("loading problem by ID", problemId)
+      loadProblemById(problemId);
+    }
+    if (problemId && problemId !== currentProblem?.id && !loading) {
+      loadProblemById(problemId);
+      // Clear the query parameter from URL after loading
+      goto("/solve", { replaceState: true });
+    } else if (!problemId && !currentProblem && !loading) {
+      // Only load recommended problem if we don't have a problem and no ID in URL
       getRecommendedProblem();
     }
   });
@@ -215,12 +289,6 @@
         style="padding: 8px 16px; background-color: #757575; color: white; border: none; border-radius: 4px; cursor: pointer;"
       >
         Improve
-      </button>
-      <button
-        on:click={() => goto("/history")}
-        style="padding: 8px 16px; background-color: #757575; color: white; border: none; border-radius: 4px; cursor: pointer;"
-      >
-        History
       </button>
     </div>
   </div>
@@ -354,7 +422,7 @@
             Get New Problem
           </button>
           <button
-            on:click={() => step = 0}
+            on:click={tryAnotherSolution}
             style="padding: 8px 16px; background-color: #757575; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
           >
             Try Another Solution
@@ -466,7 +534,7 @@
           Get New Problem
         </button>
         <button
-          on:click={() => step = 0}
+          on:click={tryAnotherSolution}
           style="padding: 8px 16px; background-color: #757575; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;"
         >
           Try Again

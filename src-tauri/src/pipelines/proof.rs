@@ -87,6 +87,7 @@ ALWAYS return valid JSON, even if the input seems unrelated to proofs - extract 
 pub async fn call_deepseek_step1(
     state: &crate::state::app::AppState,
     user_proof: &str,
+    problem_statement: Option<&str>,
 ) -> Result<Step1Response, crate::error::ZosError> {
     use crate::pipelines::router::zos_query;
     use crate::pipelines::perf;
@@ -94,7 +95,7 @@ pub async fn call_deepseek_step1(
     let _perf = perf::PerfTimer::new("step1_total");
     let prompt_start = std::time::Instant::now();
     
-    let user_prompt = build_step1_prompt(user_proof);
+    let user_prompt = build_step1_prompt(user_proof, problem_statement);
     let full_prompt = format!("{}\n\n{}", SYSTEM_PROMPT, user_prompt);
     let prompt_ms = prompt_start.elapsed().as_millis() as u64;
     perf::log_perf("step1_prompt_build", prompt_ms);
@@ -109,6 +110,7 @@ pub async fn call_deepseek_step1(
 
 pub async fn call_deepseek_step2(
     state: &crate::state::app::AppState,
+    problem_statement: &str,
     original_proof: &str,
     issues_json: &str,
     questions: &str,
@@ -120,7 +122,7 @@ pub async fn call_deepseek_step2(
     let _perf = perf::PerfTimer::new("step2_total");
     let prompt_start = std::time::Instant::now();
     
-    let user_prompt = build_step2_prompt(original_proof, issues_json, questions, user_answers);
+    let user_prompt = build_step2_prompt(problem_statement, original_proof, issues_json, questions, user_answers);
     let full_prompt = format!("{}\n\n{}", SYSTEM_PROMPT, user_prompt);
     let prompt_ms = prompt_start.elapsed().as_millis() as u64;
     perf::log_perf("step2_prompt_build", prompt_ms);
@@ -133,7 +135,13 @@ pub async fn call_deepseek_step2(
     result.map_err(|e| e.with_context("Step2 evaluation failed"))
 }
 
-pub fn build_step1_prompt(user_proof: &str) -> String {
+pub fn build_step1_prompt(user_proof: &str, problem_statement: Option<&str>) -> String {
+    let problem_context = if let Some(statement) = problem_statement {
+        format!("Problem Statement: {}\n\n", statement)
+    } else {
+        String::new()
+    };
+    
     format!(
         r#"Analyze this solution attempt and return ONLY valid JSON:
 
@@ -148,20 +156,21 @@ Example: {{"steps": [{{"id": "s1", "text": "Assume P", "role": "assumption"}}], 
 
 Return ONLY JSON, no markdown, no explanations.
 
-Solution attempt:
+{}Solution attempt:
 {}"#,
-        user_proof
+        problem_context, user_proof
     )
 }
 
 pub fn build_step2_prompt(
+    problem_statement: &str,
     original_proof: &str,
     issues_json: &str,
     questions: &str,
     user_answers: &str,
 ) -> String {
     format!(
-        r#"Evaluate answers and return ONLY valid JSON:
+        r#"Evaluate answers to clarifying questions about a solution attempt. Return ONLY valid JSON:
 
 {{
   "evaluation": [{{"question": "...", "user_answer": "...", "assessment": "correct|partially_correct|incorrect|unclear", "comment": "..."}}],
@@ -173,10 +182,11 @@ Example: {{"evaluation": [{{"question": "Why P?", "user_answer": "Because Q", "a
 
 Return ONLY JSON, no markdown, no explanations.
 
-Original: {}
-Issues: {}
-Questions: {}
-Answers: {}"#,
-        original_proof, issues_json, questions, user_answers
+Problem Statement: {}
+Original Solution Attempt: {}
+Issues Found: {}
+Clarifying Questions Asked: {}
+User's Answers: {}"#,
+        problem_statement, original_proof, issues_json, questions, user_answers
     )
 }
