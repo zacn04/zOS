@@ -64,6 +64,9 @@
       answers = [];
       step2Result = null;
       
+      // Propagate problem ID to URL
+      goto(`/solve?problem=${problem.id}`, { replaceState: true });
+      
       // Trigger precomputation of next problem in background (don't await)
       invoke("precompute_next_problem").catch(err => {
         console.warn("Failed to precompute next problem:", err);
@@ -239,6 +242,10 @@
       step1Result = null;
       answers = [];
       step2Result = null;
+      
+      // Propagate problem ID to URL
+      goto(`/solve?problem=${problem.id}`, { replaceState: true });
+      
       loading = false;
       
       // Trigger precomputation of next problem in background (don't await)
@@ -265,8 +272,7 @@
     }
     if (problemId && problemId !== currentProblem?.id && !loading) {
       loadProblemById(problemId);
-      // Clear the query parameter from URL after loading
-      goto("/solve", { replaceState: true });
+      // Problem ID is propagated to URL in loadProblemById, so we keep it there
     } else if (!problemId && !currentProblem && !loading) {
       // Only load recommended problem if we don't have a problem and no ID in URL
       getRecommendedProblem();

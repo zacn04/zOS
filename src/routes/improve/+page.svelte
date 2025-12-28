@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
 
   type SkillVector = {
     skills: Record<string, number>;
@@ -62,10 +63,34 @@
       error = "";
       const problem = await invoke<Problem>("get_recommended_problem");
       recommendedProblem = problem;
+      
+      // Propagate problem ID to URL
+      goto(`/improve?problem=${problem.id}`, { replaceState: true });
     } catch (err) {
       error = String(err);
     } finally {
       loading = false;
+    }
+  }
+
+  // Function to load problem by ID
+  async function loadProblemById(problemId: string) {
+    if (loading) return; // Prevent concurrent loads
+    loading = true;
+    error = "";
+    try {
+      const problem = await invoke<Problem>("get_problem_by_id", { problemId: problemId });
+      recommendedProblem = problem;
+      
+      // Propagate problem ID to URL
+      goto(`/improve?problem=${problem.id}`, { replaceState: true });
+      
+      loading = false;
+    } catch (err) {
+      error = String(err);
+      loading = false;
+      // Clear the problem on error
+      recommendedProblem = null;
     }
   }
 
@@ -123,6 +148,14 @@
     if (!plan) return true;
     return Date.now() / 1000 > plan.expires_at;
   }
+
+  // Watch for URL changes reactively
+  $effect(() => {
+    const problemId = $page.url.searchParams.get("problem");
+    if (problemId && problemId !== recommendedProblem?.id && !loading) {
+      loadProblemById(problemId);
+    }
+  });
 
   loadSkills();
   loadPlan();
