@@ -60,44 +60,4 @@ impl Metrics {
     pub fn record_state_transition(&self) {
         self.session_state_transitions.fetch_add(1, Ordering::Relaxed);
     }
-
-    /// Get metrics in Prometheus format
-    pub fn to_prometheus(&self) -> String {
-        format!(
-            "# HELP model_latency_ms Total model call latency in milliseconds\n\
-             # TYPE model_latency_ms counter\n\
-             model_latency_ms {}\n\
-             \n\
-             # HELP routing_time_ms Total routing decision time in milliseconds\n\
-             # TYPE routing_time_ms counter\n\
-             routing_time_ms {}\n\
-             \n\
-             # HELP cache_hit_count Total cache hits\n\
-             # TYPE cache_hit_count counter\n\
-             cache_hit_count {}\n\
-             \n\
-             # HELP cache_miss_count Total cache misses\n\
-             # TYPE cache_miss_count counter\n\
-             cache_miss_count {}\n\
-             \n\
-             # HELP fallback_count Total fallback attempts\n\
-             # TYPE fallback_count counter\n\
-             fallback_count {}\n\
-             \n\
-             # HELP errors_total Total errors\n\
-             # TYPE errors_total counter\n\
-             errors_total {}\n\
-             \n\
-             # HELP session_state_transitions Total session state transitions\n\
-             # TYPE session_state_transitions counter\n\
-             session_state_transitions {}\n",
-            self.model_latency_ms.load(Ordering::Relaxed),
-            self.routing_time_ms.load(Ordering::Relaxed),
-            self.cache_hit_count.load(Ordering::Relaxed),
-            self.cache_miss_count.load(Ordering::Relaxed),
-            self.fallback_count.load(Ordering::Relaxed),
-            self.errors_total.load(Ordering::Relaxed),
-            self.session_state_transitions.load(Ordering::Relaxed),
-        )
-    }
 }

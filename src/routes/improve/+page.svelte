@@ -291,7 +291,7 @@
           {recommendedProblem.statement}
         </p>
         <button
-          onclick={() => goto(`/solve?problem=${recommendedProblem.id}`)}
+          onclick={() => goto(`/solve?problem=${recommendedProblem.id}&source=recommended`)}
           style="padding: 8px 16px; background-color: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer;"
         >
           Start Solving

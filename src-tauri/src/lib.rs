@@ -5,7 +5,6 @@ mod memory;
 pub mod problems;
 mod sessions;
 mod brain;
-mod analytics;
 mod config;
 mod models;
 mod error;
@@ -13,7 +12,6 @@ mod logging;
 mod cache;
 mod state;
 mod metrics;
-mod circuit_breaker;
 
 #[cfg(test)]
 mod tests {
@@ -22,15 +20,8 @@ mod tests {
     mod error_handling_test;
     #[path = "../tests/json_extraction_test.rs"]
     mod json_extraction_test;
-    #[path = "../tests/circuit_breaker_test.rs"]
-    mod circuit_breaker_test;
 }
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -94,9 +85,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(app_state_arc.clone())
         .invoke_handler(tauri::generate_handler![
-            greet,
-            routes::run_proof_pipeline,
-            routes::run_proof_followup,
             routes::step1_analyze_proof,
             routes::step2_evaluate_answers,
             routes::get_recommended_problem,
@@ -106,9 +94,6 @@ pub fn run() {
             routes::get_skills,
             routes::update_skills_from_issues,
             routes::save_session_record,
-            routes::get_recent_failures,
-            routes::get_skill_drift,
-            routes::fetch_cached_problem,
             routes::refresh_daily_plan,
             routes::get_daily_plan,
             routes::submit_problem_attempt

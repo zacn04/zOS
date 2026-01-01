@@ -29,33 +29,6 @@ fn anneal_difficulty(base: f32, success: f32) -> f32 {
 }
 
 #[tauri::command]
-pub async fn run_proof_pipeline(
-    state: State<'_, std::sync::Arc<AppState>>,
-    proof: String,
-) -> Result<Step1Response, String> {
-    call_deepseek_step1(state.inner(), &proof, None)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn run_proof_followup(
-    state: State<'_, std::sync::Arc<AppState>>,
-    original_proof: String,
-    issues_json: String,
-    questions: String,
-    user_answers: String,
-) -> Result<Step2Response, String> {
-    let app_state = state.inner();
-    // Legacy function - problem statement not available, use placeholder
-    let problem_statement = "Problem statement not available in legacy API";
-    match call_deepseek_step2(app_state, problem_statement, &original_proof, &issues_json, &questions, &user_answers).await {
-        Ok(response) => Ok(response),
-        Err(e) => Err(format!("Model error: {}", e)),
-    }
-}
-
-#[tauri::command]
 pub async fn step1_analyze_proof(
     state: State<'_, std::sync::Arc<AppState>>,
     proof: String,
@@ -631,7 +604,7 @@ pub async fn precompute_next_problem(
         .and_then(|(skill, _)| skills.skills.get(&skill).copied())
         .map(|skill_val| (0.3_f32).max(1.0 - skill_val))
         .unwrap_or(0.5);
-    
+
     precompute_next_problems_internal(app_state, base_difficulty).await
 }
 
@@ -705,39 +678,6 @@ pub async fn update_skills_from_issues(
 #[tauri::command]
 pub async fn save_session_record(record: SessionRecord) -> Result<(), String> {
     save_session(&record).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn get_recent_failures(limit: usize) -> Result<Vec<SessionRecord>, String> {
-    let mut all = load_all_sessions().await
-        .map_err(|e| format!("Failed to load sessions: {}", e))?;
-    all.retain(|s| s.eval_summary.contains("incorrect") || s.eval_summary.contains("fail"));
-    all.reverse();
-    Ok(all.into_iter().take(limit).collect())
-}
-
-#[tauri::command]
-pub async fn get_skill_drift(skill: String) -> Result<f32, String> {
-    let all = load_all_sessions().await
-        .map_err(|e| format!("Failed to load sessions: {}", e))?;
-    let mut relevant: Vec<_> = all.into_iter().filter(|s| s.skill == skill).collect();
-    if relevant.len() < 2 {
-        return Ok(0.0);
-    }
-    relevant.sort_by_key(|s| s.timestamp);
-    let last_skill = relevant.last()
-        .map(|s| s.skill_after)
-        .unwrap_or(0.0);
-    let first_skill = relevant.first()
-        .map(|s| s.skill_after)
-        .unwrap_or(0.0);
-    Ok(last_skill - first_skill)
-}
-
-#[tauri::command]
-pub async fn fetch_cached_problem() -> Result<Problem, String> {
-    let mut cache = crate::problems::cache::ProblemCache::load_async().await;
-    cache.queue.pop().ok_or("Cache empty".to_string())
 }
 
 #[tauri::command]

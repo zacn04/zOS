@@ -5,7 +5,6 @@ use crate::models::availability::ensure_model_loaded;
 use crate::error::ZosError;
 use crate::cache::{get_cached, cache_response};
 use crate::state::app::AppState;
-use crate::circuit_breaker::ExponentialBackoff;
 use chrono::Utc;
 use tokio::time::Instant;
 
@@ -303,19 +302,19 @@ async fn try_model_with_retry<T: serde::de::DeserializeOwned>(
             format!("Model '{}' not found in registry", model_name),
             "routing"
         ).with_model(model_name.to_string()), None))?;
-    
-    let backoff = ExponentialBackoff::default();
+
     let max_retries = 2;
-    
+
     for attempt in 0..=max_retries {
         let attempt_start = Instant::now();
-        
+
         // Get raw response first
         let raw_response = match ollama::call_ollama_model(model_name, prompt).await {
             Ok(resp) => resp,
             Err(e) => {
                 if attempt < max_retries {
-                    let delay_ms = backoff.delay_for_attempt(attempt);
+                    // Simple exponential backoff: 100ms * 2^attempt, max 5s
+                    let delay_ms = (100 * 2_u64.pow(attempt)).min(5000);
                     tracing::warn!(
                         model = model_name,
                         error = %e,
@@ -406,7 +405,8 @@ async fn try_model_with_retry<T: serde::de::DeserializeOwned>(
                     Err(parse_err) => {
                         let error_msg = format!("Model '{}' returned invalid JSON: {}", model_name, parse_err);
                         if attempt < max_retries {
-                            let delay_ms = backoff.delay_for_attempt(attempt);
+                            // Simple exponential backoff: 100ms * 2^attempt, max 5s
+                            let delay_ms = (100 * 2_u64.pow(attempt)).min(5000);
                             tracing::warn!(
                                 model = model_name,
                                 error = %parse_err,
@@ -428,7 +428,8 @@ async fn try_model_with_retry<T: serde::de::DeserializeOwned>(
             Err(extract_err) => {
                 let error_msg = format!("Model '{}' failed to extract JSON: {}", model_name, extract_err);
                 if attempt < max_retries {
-                    let delay_ms = backoff.delay_for_attempt(attempt);
+                    // Simple exponential backoff: 100ms * 2^attempt, max 5s
+                    let delay_ms = (100 * 2_u64.pow(attempt)).min(5000);
                     tracing::warn!(
                         model = model_name,
                         error = %extract_err,

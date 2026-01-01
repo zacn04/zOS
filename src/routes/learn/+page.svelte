@@ -57,8 +57,8 @@
 
   function startProblem(problem: Problem) {
     // Navigate to solve page with problem context
-    // console.log("selected problem:", problem.id);
-    goto(`/solve?problem=${problem.id}`);
+    // Add source=user to prevent unnecessary precomputation
+    goto(`/solve?problem=${problem.id}&source=user`);
   }
 </script>
 

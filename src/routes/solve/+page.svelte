@@ -230,7 +230,7 @@
   }
 
   // Function to load problem by ID
-  async function loadProblemById(problemId: string) {
+  async function loadProblemById(problemId: string, shouldPrecompute: boolean = true) {
     if (loading) return; // Prevent concurrent loads
     loading = true;
     error = "";
@@ -242,18 +242,22 @@
       step1Result = null;
       answers = [];
       step2Result = null;
-      
-      // Propagate problem ID to URL
-      goto(`/solve?problem=${problem.id}`, { replaceState: true });
-      
+
+      // Propagate problem ID to URL (preserve source parameter if present)
+      const currentSource = $page.url.searchParams.get("source");
+      const sourceParam = currentSource ? `&source=${currentSource}` : "";
+      goto(`/solve?problem=${problem.id}${sourceParam}`, { replaceState: true });
+
       loading = false;
-      
-      // Trigger precomputation of next problem in background (don't await)
-      invoke("precompute_next_problem").catch(err => {
-        console.warn("Failed to precompute next problem:", err);
-      });
+
+      // Only precompute if this is a recommended problem (not user-selected)
+      if (shouldPrecompute) {
+        invoke("precompute_next_problem").catch(err => {
+          console.warn("Failed to precompute next problem:", err);
+        });
+      }
     } catch (err) {
-      
+
       error = String(err);
       loading = false;
       // Fall back to recommended problem if loading by ID fails
@@ -264,17 +268,17 @@
   // Watch for URL changes reactively
   $effect(() => {
     const problemId = $page.url.searchParams.get("problem");
-    // console.log("current problem", currentProblem?.id);
-    // console.log("propagated problem", problemId);
+    const source = $page.url.searchParams.get("source");
+
+    // Only precompute if source is not "user" (i.e., it's recommended or unspecified)
+    const shouldPrecompute = source !== "user";
+
     if (currentProblem?.id === undefined && problemId) {
-      // console.log("loading problem by ID", problemId)
-      loadProblemById(problemId);
+      loadProblemById(problemId, shouldPrecompute);
     }
     if (problemId && problemId !== currentProblem?.id && !loading) {
-      loadProblemById(problemId);
-      // Problem ID is propagated to URL in loadProblemById, so we keep it there
+      loadProblemById(problemId, shouldPrecompute);
     } else if (!problemId && !currentProblem && !loading) {
-      // Only load recommended problem if we don't have a problem and no ID in URL
       getRecommendedProblem();
     }
   });
